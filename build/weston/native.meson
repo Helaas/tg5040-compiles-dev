@@ -1,0 +1,6 @@
+[binaries]
+pkg-config = ['env', 'PKG_CONFIG_SYSROOT_DIR=', 'pkg-config']
+
+[properties]
+sys_root = '/'
+pkg_config_libdir = ['/usr/lib/aarch64-linux-gnu/pkgconfig', '/usr/share/pkgconfig']

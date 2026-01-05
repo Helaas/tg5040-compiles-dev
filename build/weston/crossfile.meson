@@ -1,0 +1,23 @@
+[binaries]
+c = '/opt/aarch64-nextui-linux-gnu/bin/aarch64-nextui-linux-gnu-gcc'
+cpp = '/opt/aarch64-nextui-linux-gnu/bin/aarch64-nextui-linux-gnu-g++'
+ar = '/opt/aarch64-nextui-linux-gnu/bin/aarch64-nextui-linux-gnu-ar'
+strip = '/opt/aarch64-nextui-linux-gnu/bin/aarch64-nextui-linux-gnu-strip'
+pkg-config = 'pkg-config'
+ld = '/opt/aarch64-nextui-linux-gnu/bin/aarch64-nextui-linux-gnu-ld'
+
+[properties]
+pkg_config_libdir = ['/workspace/build/weston/prefix/lib/pkgconfig', '/workspace/build/weston/prefix/share/pkgconfig', '/opt/aarch64-nextui-linux-gnu/aarch64-nextui-linux-gnu/libc/usr/lib/pkgconfig', '/opt/aarch64-nextui-linux-gnu/aarch64-nextui-linux-gnu/libc/usr/share/pkgconfig']
+needs_exe_wrapper = true
+
+[built-in options]
+c_args = ['--sysroot=/opt/aarch64-nextui-linux-gnu/aarch64-nextui-linux-gnu/libc']
+c_link_args = ['--sysroot=/opt/aarch64-nextui-linux-gnu/aarch64-nextui-linux-gnu/libc']
+cpp_args = ['--sysroot=/opt/aarch64-nextui-linux-gnu/aarch64-nextui-linux-gnu/libc']
+cpp_link_args = ['--sysroot=/opt/aarch64-nextui-linux-gnu/aarch64-nextui-linux-gnu/libc']
+
+[host_machine]
+system = 'linux'
+cpu_family = 'aarch64'
+cpu = 'aarch64'
+endian = 'little'

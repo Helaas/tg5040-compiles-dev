@@ -1,0 +1,23 @@
+/llm*
+.DS_Store
+
+# Ignore build outputs
+/build/*
+
+# Allow top-level weston build tree but still ignore generated artifacts
+!/build/weston
+/build/weston/build
+/build/weston/prefix
+/build/weston/.stamps
+/build/weston/deploy
+/build/weston/weston.tar.gz
+
+# Keep inputs/config we need for reproducible builds
+!/build/weston/crossfile.meson
+!/build/weston/native.meson
+!/build/weston/src
+
+# Keep only source tarballs, ignore extracted directories
+/build/weston/src/*
+!/build/weston/src/*.tar.gz
+!/build/weston/src/*.tar.xz
