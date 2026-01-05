@@ -7,7 +7,15 @@ PAK_BASENAME=$(basename -- "$PAK_DIR")
 PAK_NAME=${PAK_BASENAME%.*}
 
 # Shared userdata/log paths (fallbacks)
-SHARED_USERDATA_ROOT=${SHARED_USERDATA_PATH:-"$HOME/.userdata"}
+DEFAULT_UD_DEVICE="/mnt/SDCARD/.userdata/tg5040"
+DEFAULT_UD="/mnt/SDCARD/.userdata"
+if [ -d "$DEFAULT_UD_DEVICE" ]; then
+	SHARED_USERDATA_ROOT=${SHARED_USERDATA_PATH:-"$DEFAULT_UD_DEVICE"}
+elif [ -d "$DEFAULT_UD" ]; then
+	SHARED_USERDATA_ROOT=${SHARED_USERDATA_PATH:-"$DEFAULT_UD"}
+else
+	SHARED_USERDATA_ROOT=${SHARED_USERDATA_PATH:-"$HOME/.userdata"}
+fi
 HOME="$SHARED_USERDATA_ROOT/$PAK_NAME"
 mkdir -p "$HOME"
 
@@ -43,4 +51,28 @@ chmod 700 "$XDG_RUNTIME_DIR" || true
 export WESTON_HEADLESS="${WESTON_HEADLESS:-0}"
 
 echo "=== Weston starting (headless=$WESTON_HEADLESS) ==="
-exec "$PAK_DIR/bin/run-weston.sh" "$@"
+"$PAK_DIR/bin/run-weston.sh" "$@" &
+WESTON_PID=$!
+
+# Wait for Wayland socket
+WAYLAND_DISPLAY=
+for candidate in wayland-0 wayland-1; do
+	i=0
+	while [ $i -lt 50 ]; do
+		if [ -S "$XDG_RUNTIME_DIR/$candidate" ]; then
+			WAYLAND_DISPLAY=$candidate
+			break 2
+		fi
+		i=$((i+1))
+		sleep 0.1
+	done
+done
+[ -z "$WAYLAND_DISPLAY" ] && WAYLAND_DISPLAY=wayland-0
+
+# Fire up a simple-shm client so we see something on screen
+if [ -x "$PAK_DIR/bin/weston-simple-shm" ]; then
+	echo "=== Launching simple-shm demo ==="
+	WAYLAND_DISPLAY=$WAYLAND_DISPLAY "$PAK_DIR/bin/weston-simple-shm" >/dev/null 2>&1 &
+fi
+
+wait "$WESTON_PID"
