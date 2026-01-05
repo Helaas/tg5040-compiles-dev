@@ -73,6 +73,15 @@ done
 if [ -x "$PAK_DIR/bin/weston-simple-shm" ]; then
 	echo "=== Launching simple-shm demo ==="
 	WAYLAND_DISPLAY=$WAYLAND_DISPLAY "$PAK_DIR/bin/weston-simple-shm" >/dev/null 2>&1 &
+	DEMO_PID=$!
 fi
 
-wait "$WESTON_PID"
+# Keep things alive briefly for demo visibility
+sleep 15
+
+# Tear down demo and weston
+if [ -n "${DEMO_PID:-}" ]; then
+	kill "$DEMO_PID" 2>/dev/null || true
+fi
+kill "$WESTON_PID" 2>/dev/null || true
+wait "$WESTON_PID" 2>/dev/null || true
