@@ -28,10 +28,26 @@ if [ ! -S "$SEATD_SOCK" ]; then
 	sleep 0.5
 fi
 
-BACKEND_ARGS="--backend=drm-backend.so --shell=fullscreen-shell.so"
-if [ "$WESTON_HEADLESS" = "1" ]; then
-	BACKEND_ARGS="--backend=headless-backend.so --shell=fullscreen-shell.so --width=640 --height=480"
+BACKEND=${WESTON_BACKEND:-}
+MODE="drm"
+if [ "${WESTON_HEADLESS:-0}" = "1" ]; then
+	MODE="headless"
+elif [ "$BACKEND" = "fbdev" ]; then
+	MODE="fbdev"
 fi
+
+BACKEND_ARGS="--backend=drm-backend.so --shell=fullscreen-shell.so"
+case "$MODE" in
+	headless)
+		BACKEND_ARGS="--backend=headless-backend.so --shell=fullscreen-shell.so --width=${WESTON_WIDTH:-640} --height=${WESTON_HEIGHT:-480}"
+		;;
+	fbdev)
+		FBDEV_DEVICE=${FBDEV_DEVICE:-/dev/fb0}
+		BACKEND_ARGS="--backend=fbdev-backend.so --shell=fullscreen-shell.so --device=$FBDEV_DEVICE"
+		;;
+	*)
+		;;
+esac
 
 "$BASE/bin/weston" $BACKEND_ARGS --log="$BASE/logs/weston.log" "$@"
 STATUS=$?
