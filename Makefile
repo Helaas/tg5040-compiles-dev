@@ -36,7 +36,7 @@ TARBALLS = \
 	$(SRC_DIR)/libxkbcommon-1.6.0.tar.xz \
 	$(SRC_DIR)/0.8.0.tar.gz \
 	$(SRC_DIR)/cairo-1.16.0.tar.xz \
-	$(SRC_DIR)/weston-12.0.4.tar.gz
+	$(SRC_DIR)/weston-10.0.4.tar.xz
 
 .PHONY: all deps weston bundle deploy container clean
 
@@ -174,15 +174,16 @@ $(STAMPS)/cairo: $(STAMPS)/seatd | $(STAMPS)
 $(STAMPS)/weston: $(STAMPS)/cairo | $(STAMPS)
 	@$(DOCKER_EXEC) "set -euo pipefail; $(ENV_EXPORT) \
 		cd $(WORKDIR)/build/weston/build; \
-		rm -rf weston-12.0.4 && tar xf $(WORKDIR)/build/weston/src/weston-12.0.4.tar.gz; \
-		cd weston-12.0.4; \
+		rm -rf weston-10.0.4 && tar xf $(WORKDIR)/build/weston/src/weston-10.0.4.tar.xz; \
+		cd weston-10.0.4; \
 		# Disable tests (not cross-safe) \
 		sed -i \"s/^subdir('tests')/# subdir('tests')/\" meson.build; \
 		meson setup _build --prefix=\$$PREFIX --libdir=lib --buildtype=release --cross-file=$(CROSSFILE) --native-file=$(NATIVEFILE) \
-			-Drenderer-gl=false -Dbackend-drm=true -Dbackend-headless=true -Dbackend-default=drm \
-			-Dbackend-pipewire=false -Dbackend-rdp=false -Dbackend-vnc=false -Dbackend-wayland=false -Dbackend-x11=false \
+			-Drenderer-gl=false -Dbackend-drm=true -Dbackend-headless=true -Ddeprecated-backend-fbdev=true -Dbackend-default=drm \
+			-Dbackend-rdp=false -Dbackend-wayland=false -Dbackend-x11=false \
 			-Dbackend-drm-screencast-vaapi=false -Dscreenshare=false -Dpipewire=false -Dremoting=false -Dxwayland=false -Dsystemd=false \
-			-Dshell-desktop=false -Dshell-ivi=false -Dshell-kiosk=false -Dcolor-management-lcms=false -Dimage-jpeg=false -Dimage-webp=false \
+			-Dlauncher-logind=false -Ddeprecated-weston-launch=false -Ddeprecated-wl-shell=false \
+			-Dshell-desktop=false -Dshell-ivi=false -Dshell-kiosk=false -Dcolor-management-lcms=false -Dcolor-management-colord=false -Dimage-jpeg=false -Dimage-webp=false \
 			-Ddemo-clients=false -Dsimple-clients=shm -Dtools=info -Dwcap-decode=false -Dlauncher-libseat=true; \
 		ninja -C _build install"
 	@touch $@

@@ -3,11 +3,11 @@
 set -e
 
 BASE="$(cd "$(dirname "$0")/.." && pwd)"
-export LD_LIBRARY_PATH="$BASE/lib:$BASE/lib/libweston-12:$BASE/lib/weston${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+export LD_LIBRARY_PATH="$BASE/lib:$BASE/lib/libweston-10:$BASE/lib/weston${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 export XKB_CONFIG_ROOT="$BASE/share/X11/xkb"
 export WESTON_DATA_DIR="$BASE/share/weston"
 export WESTON_CONFIG_FILE="$BASE/weston.ini"
-export WESTON_MODULE_MAP="drm-backend.so=$BASE/lib/libweston-12/drm-backend.so;headless-backend.so=$BASE/lib/libweston-12/headless-backend.so;fullscreen-shell.so=$BASE/lib/weston/fullscreen-shell.so;libexec_weston.so.0=$BASE/lib/weston/libexec_weston.so.0"
+export WESTON_MODULE_MAP="drm-backend.so=$BASE/lib/libweston-10/drm-backend.so;headless-backend.so=$BASE/lib/libweston-10/headless-backend.so;fbdev-backend.so=$BASE/lib/libweston-10/fbdev-backend.so;fullscreen-shell.so=$BASE/lib/weston/fullscreen-shell.so;libexec_weston.so.0=$BASE/lib/weston/libexec_weston.so.0"
 export LIBSEAT_BACKEND=seatd
 
 RUNDIR="$BASE/run"
@@ -33,6 +33,9 @@ MODE="drm"
 if [ "${WESTON_HEADLESS:-0}" = "1" ]; then
 	MODE="headless"
 elif [ "$BACKEND" = "fbdev" ]; then
+	MODE="fbdev"
+elif [ -z "$BACKEND" ] && [ -e /dev/fb0 ]; then
+	# Prefer fbdev when available to avoid DRM connector issues on this device.
 	MODE="fbdev"
 fi
 

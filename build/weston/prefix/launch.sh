@@ -28,11 +28,11 @@ cd "$PAK_DIR"
 
 # Env for weston
 export PATH="$PAK_DIR/bin:$PATH"
-export LD_LIBRARY_PATH="$PAK_DIR/lib:$PAK_DIR/lib/libweston-12:$PAK_DIR/lib/weston${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+export LD_LIBRARY_PATH="$PAK_DIR/lib:$PAK_DIR/lib/libweston-10:$PAK_DIR/lib/weston${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 export XKB_CONFIG_ROOT="$PAK_DIR/share/X11/xkb"
 export WESTON_DATA_DIR="$PAK_DIR/share/weston"
 export WESTON_CONFIG_FILE="$PAK_DIR/weston.ini"
-export WESTON_MODULE_MAP="drm-backend.so=$PAK_DIR/lib/libweston-12/drm-backend.so;headless-backend.so=$PAK_DIR/lib/libweston-12/headless-backend.so;fullscreen-shell.so=$PAK_DIR/lib/weston/fullscreen-shell.so;libexec_weston.so.0=$PAK_DIR/lib/weston/libexec_weston.so.0"
+export WESTON_MODULE_MAP="drm-backend.so=$PAK_DIR/lib/libweston-10/drm-backend.so;headless-backend.so=$PAK_DIR/lib/libweston-10/headless-backend.so;fbdev-backend.so=$PAK_DIR/lib/libweston-10/fbdev-backend.so;fullscreen-shell.so=$PAK_DIR/lib/weston/fullscreen-shell.so;libexec_weston.so.0=$PAK_DIR/lib/weston/libexec_weston.so.0"
 export LIBSEAT_BACKEND=seatd
 export SEATD_SOCK="$PAK_DIR/seatd.sock"
 export XDG_RUNTIME_DIR="$PAK_DIR/run"
@@ -40,7 +40,7 @@ mkdir -p "$XDG_RUNTIME_DIR"
 chmod 700 "$XDG_RUNTIME_DIR" || true
 
 # Default to headless to avoid disrupting the UI
-export WESTON_HEADLESS="${WESTON_HEADLESS:-1}"
+export WESTON_HEADLESS="${WESTON_HEADLESS:-0}"
 
 echo "=== Weston starting (headless=$WESTON_HEADLESS) ==="
 exec "$PAK_DIR/bin/run-weston.sh" "$@"
