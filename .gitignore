@@ -7,10 +7,18 @@
 # Allow top-level weston build tree but still ignore generated artifacts
 !/build/weston
 /build/weston/build
-/build/weston/prefix
 /build/weston/.stamps
 /build/weston/deploy
 /build/weston/weston.tar.gz
+
+# Keep the launcher/config scripts that are authored, not generated
+/build/weston/prefix/**
+!/build/weston/prefix/
+!/build/weston/prefix/launch.sh
+!/build/weston/prefix/weston.ini
+!/build/weston/prefix/bin/
+/build/weston/prefix/bin/*
+!/build/weston/prefix/bin/run-weston.sh
 
 # Keep inputs/config we need for reproducible builds
 !/build/weston/crossfile.meson

@@ -60,16 +60,17 @@ weston: deps $(STAMPS)/weston
 
 bundle: weston
 	@echo "Creating deployable archive..."
-	@tar -C $(PREFIX) -czhf $(BUILD_ROOT)/weston.tar.gz --exclude=prefix .
+	@find $(PREFIX) \( -name '.DS_Store' -o -name '._*' \) -delete
+	@COPYFILE_DISABLE=1 tar -C $(PREFIX) -czhf $(BUILD_ROOT)/weston.tar.gz --exclude=prefix --exclude='.DS_Store' --exclude='*/.DS_Store' --exclude='._*' --exclude='*/._*' .
 	@echo "Archive written to $(BUILD_ROOT)/weston.tar.gz"
 
 deploy: bundle
 	@if ! command -v adb >/dev/null 2>&1; then echo "adb not found in PATH"; exit 1; fi
 	@echo "Pushing weston bundle to device..."
-	@adb shell "rm -rf /mnt/SDCARD/Tools/tg5040/weston && mkdir -p /mnt/SDCARD/Tools/tg5040/weston"
-	@adb push $(BUILD_ROOT)/weston.tar.gz /mnt/SDCARD/Tools/tg5040/weston/weston.tar.gz
-	@adb shell "cd /mnt/SDCARD/Tools/tg5040/weston && tar xzf weston.tar.gz && rm weston.tar.gz"
-	@echo "Deploy complete. Launch with /mnt/SDCARD/Tools/tg5040/weston/bin/run-weston.sh (set WESTON_HEADLESS=1 for headless)"
+	@adb shell "ts=\$$(date +%s); if [ -d /mnt/SDCARD/Tools/tg5040/Weston.pak ]; then mv /mnt/SDCARD/Tools/tg5040/Weston.pak /mnt/SDCARD/Tools/tg5040/Weston.pak.bak.\$${ts}; fi; mkdir -p /mnt/SDCARD/Tools/tg5040/Weston.pak"
+	@adb push $(BUILD_ROOT)/weston.tar.gz /mnt/SDCARD/Tools/tg5040/Weston.pak/weston.tar.gz
+	@adb shell "cd /mnt/SDCARD/Tools/tg5040/Weston.pak && tar xzf weston.tar.gz && rm weston.tar.gz"
+	@echo "Deploy complete. Launch with /mnt/SDCARD/Tools/tg5040/Weston.pak/launch.sh (set WESTON_HEADLESS=1 for headless)"
 
 clean:
 	rm -rf $(BUILD_DIR) $(STAMPS) $(BUILD_ROOT)/weston.tar.gz
@@ -153,7 +154,7 @@ $(STAMPS)/seatd: $(STAMPS)/libxkbcommon | $(STAMPS)
 		rm -rf seatd-0.8.0 && tar xf $(WORKDIR)/build/weston/src/0.8.0.tar.gz; \
 		cd seatd-0.8.0; \
 		meson setup _build --prefix=\$$PREFIX --libdir=lib --buildtype=release --cross-file=$(CROSSFILE) --native-file=$(NATIVEFILE) \
-			-Ddefaultpath=/mnt/SDCARD/Tools/tg5040/weston/seatd.sock \
+			-Ddefaultpath=/mnt/SDCARD/Tools/tg5040/Weston.pak/run/seatd.sock \
 			-Dexamples=disabled -Dman-pages=disabled -Dlibseat-logind=disabled -Dlibseat-seatd=enabled -Dlibseat-builtin=disabled -Dserver=enabled; \
 		ninja -C _build install"
 	@touch $@
