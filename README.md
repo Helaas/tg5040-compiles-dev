@@ -1,6 +1,6 @@
-# TrimUI Weston + InfoZip Build System
+# TrimUI Weston + InfoZip + X11 Build System
 
-This repository contains a complete build system for cross-compiling **Weston 10.0.4** (Wayland compositor) and **InfoZip 3.0** as aarch64 binaries for TrimUI targets.
+This repository contains a complete build system for cross-compiling **Weston 10.0.4** (Wayland compositor), **InfoZip 3.0**, and **X11 server** as aarch64 binaries for TrimUI targets.
 
 ## Quick Start
 
@@ -13,14 +13,18 @@ make weston
 # Build InfoZip 3.0 aarch64
 make zip
 
-# Verify both artifacts
+# Build X11 server + dependencies (PowerVR optimized)
+make x11-download && make x11
+
+# Verify all artifacts
 make verify-artifacts
+make verify-x11
 ```
 
 ### Deploy to Device
 
 ```bash
-# Create deployable bundle
+# Create deployable bundle (Weston + InfoZip)
 make bundle
 
 # Push to device via adb
@@ -60,6 +64,26 @@ make deploy
 - **GLIBC requirement**: ≥ 2.17 (verified on build)
 - **Status**: Statically verified via `readelf` and `strings` for GLIBC symbols
 
+### X11 Server + Libraries
+
+**Location**: `build/weston/prefix/`
+
+- **Xvfb**: Virtual X11 framebuffer server (aarch64)
+- **libX11.so**: Core X11 client library
+- **libxcb.so**: X11 protocol bindings
+- **libXext.so**: X11 extensions
+- **libXrender.so**: X11 rendering extension
+- **libGL.so, libEGL.so, libGLESv2.so**: OpenGL/GLES (Mesa 23.3.5)
+- **Keyboard layouts**: X11 keyboard configuration
+
+**Features**:
+- **GPU**: PowerVR optimized with OpenGL ES 2.0+ support
+- **Rendering**: Hardware acceleration (DRM render node) + software fallback
+- **Backend**: Virtual framebuffer (Xvfb) for headless operation
+- **Use**: Launch scripts requiring X11 (not deployed to device)
+
+See [X11-BUILD.md](X11-BUILD.md) for detailed setup & configuration.
+
 ---
 
 ## Build System
@@ -71,12 +95,17 @@ make deploy
 | `make weston` | Build Weston stack (default) | `build/weston/prefix/` |
 | `make weston-launch` | Verify weston-launch binary | Checks aarch64 + libpam |
 | `make zip` | Build InfoZip 3.0 | `./zip` |
-| `make verify-artifacts` | Check both binaries | Status report |
+| `make x11` | Build X11 + dependencies | `build/weston/prefix/bin/Xvfb` |
+| `make x11-deps` | Build only X11 libraries | `build/weston/prefix/lib/libX11*` |
+| `make x11-download` | Download X11 sources | `build/weston/src/` |
+| `make verify-artifacts` | Check weston & zip | Status report |
+| `make verify-x11` | Check X11 server | Status report |
 | `make bundle` | Create tar.gz archive | `build/weston/weston.tar.gz` |
 | `make deploy` | Push to device via adb | On device: `/mnt/SDCARD/Tools/tg5040/Weston.pak/` |
 | `make clean` | Remove all artifacts | Resets to clean state |
 | `make clean-weston` | Remove only weston | Keeps deps |
 | `make clean-zip` | Remove only zip | Keeps weston |
+| `make clean-x11` | Remove only X11 | Keeps deps |
 | `make help` | Show all targets | Usage info |
 
 ### Container Build

@@ -9,8 +9,11 @@ make weston
 # Build InfoZip 3.0 aarch64
 make zip
 
-# Verify both are correct and linked properly
-make verify-artifacts
+# Build X11 server + libraries (PowerVR optimized)
+make x11-download && make x11
+
+# Verify all are correct and linked properly
+make verify-artifacts && make verify-x11
 ```
 
 ## Deployment
@@ -37,6 +40,9 @@ make clean-weston && make weston
 
 # Keep everything except zip
 make clean-zip && make zip
+
+# Keep everything except X11
+make clean-x11 && make x11
 ```
 
 ## Verification
@@ -61,6 +67,9 @@ strings ./zip | grep GLIBC_
 |----------|------|------|------|
 | weston-launch | `build/weston/prefix/bin/weston-launch` | ~33KB | aarch64 binary |
 | zip | `./zip` | ~196KB | aarch64 binary |
+| Xvfb (X11) | `build/weston/prefix/bin/Xvfb` | ~3MB | aarch64 binary |
+| X11 libs | `build/weston/prefix/lib/libX11*` | ~4MB | aarch64 shared libs |
+| OpenGL (Mesa) | `build/weston/prefix/lib/libGL*` | ~8MB | aarch64 shared libs |
 | Full bundle | `build/weston/weston.tar.gz` | Variable | Compressed archive |
 
 ## Dependencies
@@ -73,6 +82,15 @@ All built and cached in `build/weston/prefix/`:
 - cairo 1.16.0
 - seatd/libseat 0.8.0
 - Linux-PAM 1.5.3 (in SYSROOT)
+
+### X11 Dependencies (if building X11)
+- xcb-proto 1.17.0
+- libxcb 1.16
+- mesa 23.3.5 (OpenGL ES)
+- libX11 1.8.7
+- libXext 1.3.5
+- libXrender 0.9.11
+- Xorg Server 1.20.14 (Xvfb backend)
 
 ## Container
 

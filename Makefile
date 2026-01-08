@@ -17,7 +17,7 @@ WORKDIR         := /workspace
 CROSSFILE       := $(WORKDIR)/build/weston/crossfile.meson
 NATIVEFILE      := $(WORKDIR)/build/weston/native.meson
 SYSROOT         := /opt/aarch64-nextui-linux-gnu/aarch64-nextui-linux-gnu/libc
-PKG_PATH        := $(WORKDIR)/build/weston/prefix/lib/pkgconfig:$(WORKDIR)/build/weston/prefix/share/pkgconfig
+PKG_PATH        := $(WORKDIR)/build/weston/prefix/lib/pkgconfig:$(WORKDIR)/build/weston/prefix/share/pkgconfig:$(WORKDIR)/build/x11/prefix/lib/pkgconfig:$(WORKDIR)/build/x11/prefix/share/pkgconfig
 
 # Helpers
 DOCKER_EXEC     = docker exec $(CONTAINER) bash -lc
@@ -42,7 +42,7 @@ TARBALLS = \
 WESTON_LAUNCH   := $(PREFIX)/bin/weston-launch
 ZIP_BINARY      := ./zip
 
-.PHONY: all deps weston weston-launch zip verify-artifacts bundle deploy container clean clean-weston clean-zip help
+.PHONY: all deps weston weston-launch zip x11 x11-deps x11-download x11-xwayland verify-artifacts verify-x11 bundle deploy container clean clean-weston clean-zip clean-x11 help
 
 all: weston
 
@@ -51,7 +51,13 @@ help:
 	@echo "  make weston           - Build Weston 10.0.4 + dependencies + weston-launch (default)"
 	@echo "  make weston-launch    - Verify weston-launch binary exists and is correctly linked"
 	@echo "  make zip              - Build InfoZip 3.0 aarch64 binary"
+	@echo "  make x11              - Build X11 server + dependencies (PowerVR/OpenGL ES optimized)"
+	@echo "  make x11-deps         - Build only X11 dependencies (libX11, libXext, libXrender, mesa)"
+	@echo "  make x11-download     - Download X11 source tarballs"
+	@echo "  make x11-xwayland     - Build Xwayland binary for Weston"
 	@echo "  make verify-artifacts - Verify both weston-launch and zip binaries"
+	@echo "  make verify-x11       - Verify X11 server binary and OpenGL support"
+	@echo "  make clean-x11        - Remove only X11 build (keep sources)"
 	@echo "  make bundle           - Create deployable tar.gz archive"
 	@echo "  make deploy           - Deploy bundle to device via adb"
 	@echo "  make clean            - Remove all build artifacts and stamps"
@@ -73,7 +79,7 @@ container:
 deps: | container
 deps: $(STAMPS)/libdrm $(STAMPS)/wayland $(STAMPS)/wayland-protocols $(STAMPS)/libevdev $(STAMPS)/libinput $(STAMPS)/xkeyboard-config $(STAMPS)/libxkbcommon $(STAMPS)/seatd $(STAMPS)/cairo
 
-weston: deps $(STAMPS)/weston
+weston: deps x11-xwayland $(STAMPS)/weston
 
 bundle: weston
 	@echo "Creating deployable archive..."
@@ -91,16 +97,36 @@ deploy: bundle
 
 clean:
 	rm -rf $(BUILD_DIR) $(STAMPS) $(BUILD_ROOT)/weston.tar.gz $(ZIP_BINARY)
+	$(MAKE) -C build/x11 clean 2>/dev/null || true
 	@echo "Cleaned all artifacts and stamps."
 
 clean-weston:
 	rm -f $(STAMPS)/weston
-	rm -rf $(PREFIX)/bin/weston $(PREFIX)/bin/weston-launch $(PREFIX)/lib/aarch64-linux-gnu/libweston* $(PREFIX)/lib/aarch64-linux-gnu/weston
+	rm -rf $(PREFIX)/bin/weston $(PREFIX)/bin/weston.bin $(PREFIX)/bin/weston-launch $(PREFIX)/lib/aarch64-linux-gnu/libweston* $(PREFIX)/lib/aarch64-linux-gnu/weston
 	@echo "Cleaned weston build (keeping deps in prefix)."
 
 clean-zip:
 	rm -f $(ZIP_BINARY)
 	@echo "Cleaned zip binary."
+
+# X11 build targets - delegate to build/x11/Makefile
+x11:
+	$(MAKE) -C build/x11 x11
+
+x11-deps:
+	$(MAKE) -C build/x11 x11-deps
+
+x11-download:
+	$(MAKE) -C build/x11 download
+
+x11-xwayland:
+	$(MAKE) -C build/x11 x11-xwayland
+
+verify-x11:
+	$(MAKE) -C build/x11 verify-x11
+
+clean-x11:
+	$(MAKE) -C build/x11 clean-x11
 
 # Build and verify weston-launch (part of weston target)
 weston-launch: $(WESTON_LAUNCH)
@@ -133,6 +159,11 @@ verify-artifacts: weston-launch zip
 	@echo "weston-launch: $$(test -f $(WESTON_LAUNCH) && echo '✓ Present' || echo '✗ Missing')"
 	@echo "zip binary:    $$(test -f $(ZIP_BINARY) && echo '✓ Present' || echo '✗ Missing')"
 	@echo "=========================================="
+	@if command -v aarch64-linux-gnu-readelf >/dev/null 2>&1; then \
+		aarch64-linux-gnu-readelf -d $(X11_SERVER) 2>/dev/null | grep -q "libGL.so" && echo "✓ Linked with OpenGL" || echo "⚠ OpenGL not linked"; \
+	fi
+	@test -d $(PREFIX)/lib && test -n "$$(find $(PREFIX)/lib -name 'libGL*' 2>/dev/null)" && echo "✓ OpenGL libraries present" || echo "⚠ OpenGL libraries not found"
+	@echo "======================================"
 
 # Individual build steps
 
@@ -226,7 +257,7 @@ $(STAMPS)/cairo: $(STAMPS)/seatd | $(STAMPS)
 		cd cairo-1.16.0; \
 		./configure --host=aarch64-nextui-linux-gnu --prefix=\$$PREFIX --libdir=\$$PREFIX/lib \
 			--enable-png=yes --enable-ft=no --enable-gobject=no --enable-ps=no --enable-pdf=no \
-			--enable-xlib=no --enable-xlib-xrender=no --enable-xcb=no --enable-xcb-shm=no \
+			--enable-xlib=no --enable-xlib-xrender=no --enable-xcb=yes --enable-xcb-shm=yes \
 			--enable-glesv2=no --enable-gl=no --enable-svg=no; \
 		make -C src -j$$(nproc) install"
 	@touch $@
@@ -236,7 +267,6 @@ $(STAMPS)/weston: $(STAMPS)/cairo | $(STAMPS)
 		cd $(WORKDIR)/build/weston/build; \
 		rm -rf weston-10.0.4 && tar xf $(WORKDIR)/build/weston/src/weston-10.0.4.tar.xz; \
 		cd weston-10.0.4; \
-		# Disable tests (not cross-safe) \
 		sed -i \"s/^subdir('tests')/# subdir('tests')/\" meson.build; \
 		meson setup _build --prefix=\$$PREFIX --libdir=lib --buildtype=release --cross-file=$(CROSSFILE) --native-file=$(NATIVEFILE) \
 			-Drenderer-gl=false -Dbackend-drm=true -Dbackend-headless=true -Ddeprecated-backend-fbdev=true -Dbackend-default=drm \
@@ -244,7 +274,39 @@ $(STAMPS)/weston: $(STAMPS)/cairo | $(STAMPS)
 			-Dbackend-drm-screencast-vaapi=false -Dscreenshare=false -Dpipewire=false -Dremoting=false -Dxwayland=false -Dsystemd=false \
 			-Dlauncher-logind=false -Ddeprecated-weston-launch=true -Ddeprecated-wl-shell=false \
 			-Dshell-desktop=false -Dshell-ivi=false -Dshell-kiosk=false -Dcolor-management-lcms=false -Dcolor-management-colord=false -Dimage-jpeg=false -Dimage-webp=false \
-			-Ddemo-clients=false -Dsimple-clients=shm -Dtools=info -Dwcap-decode=false -Dlauncher-libseat=true; \
+			-Ddemo-clients=false -Dsimple-clients=shm -Dtools=info -Dwcap-decode=false -Dlauncher-libseat=true \
+			-Dxwayland=true -Dxwayland-path=/mnt/SDCARD/Tools/tg5040/Weston.pak/bin/Xwayland; \
 		ninja -C _build install"
+	@if [ -x "$(ROOT)/build/x11/prefix/bin/Xwayland" ]; then \
+		cp -f "$(ROOT)/build/x11/prefix/bin/Xwayland" "$(PREFIX)/bin/Xwayland"; \
+	fi
+	@if [ -d "$(ROOT)/build/x11/prefix/lib" ]; then \
+		cp -f "$(ROOT)/build/x11/prefix/lib/libX11.so"* "$(PREFIX)/lib/" 2>/dev/null || true; \
+		cp -f "$(ROOT)/build/x11/prefix/lib/libXext.so"* "$(PREFIX)/lib/" 2>/dev/null || true; \
+		cp -f "$(ROOT)/build/x11/prefix/lib/libXrender.so"* "$(PREFIX)/lib/" 2>/dev/null || true; \
+		cp -f "$(ROOT)/build/x11/prefix/lib/libXfixes.so"* "$(PREFIX)/lib/" 2>/dev/null || true; \
+		cp -f "$(ROOT)/build/x11/prefix/lib/libXcursor.so"* "$(PREFIX)/lib/" 2>/dev/null || true; \
+		cp -f "$(ROOT)/build/x11/prefix/lib/libXau.so"* "$(PREFIX)/lib/" 2>/dev/null || true; \
+		cp -f "$(ROOT)/build/x11/prefix/lib/libXfont2.so"* "$(PREFIX)/lib/" 2>/dev/null || true; \
+		cp -f "$(ROOT)/build/x11/prefix/lib/libfontenc.so"* "$(PREFIX)/lib/" 2>/dev/null || true; \
+		cp -f "$(ROOT)/build/x11/prefix/lib/libxkbfile.so"* "$(PREFIX)/lib/" 2>/dev/null || true; \
+		cp -f "$(ROOT)/build/x11/prefix/lib/libxcb.so"* "$(PREFIX)/lib/" 2>/dev/null || true; \
+		cp -f "$(ROOT)/build/x11/prefix/lib/libxcb-*.so"* "$(PREFIX)/lib/" 2>/dev/null || true; \
+		cp -f "$(ROOT)/build/x11/prefix/lib/libpixman-1.so"* "$(PREFIX)/lib/" 2>/dev/null || true; \
+	fi
+	@if [ -x "$(PREFIX)/bin/weston" ]; then \
+		mv "$(PREFIX)/bin/weston" "$(PREFIX)/bin/weston.bin"; \
+		printf '%s\n' '#!/bin/sh' '' 'set -e' \
+			'BASE="$$(cd "$$(dirname "$$0")/.." && pwd)"' \
+			'export LD_LIBRARY_PATH="$$BASE/lib:$$BASE/lib/libweston-10:$$BASE/lib/weston$${LD_LIBRARY_PATH:+:$$LD_LIBRARY_PATH}"' \
+			'export XKB_CONFIG_ROOT="$$BASE/share/X11/xkb"' \
+			'export WESTON_DATA_DIR="$$BASE/share/weston"' \
+			'export WESTON_CONFIG_FILE="$$BASE/weston.ini"' \
+			'export WESTON_MODULE_MAP="drm-backend.so=$$BASE/lib/libweston-10/drm-backend.so;headless-backend.so=$$BASE/lib/libweston-10/headless-backend.so;fbdev-backend.so=$$BASE/lib/libweston-10/fbdev-backend.so;xwayland.so=$$BASE/lib/libweston-10/xwayland.so;fullscreen-shell.so=$$BASE/lib/weston/fullscreen-shell.so;libexec_weston.so.0=$$BASE/lib/weston/libexec_weston.so.0"' \
+			'export LIBSEAT_BACKEND=seatd' \
+			'exec "$$BASE/bin/weston.bin" "$$@"' \
+			> "$(PREFIX)/bin/weston"; \
+		chmod +x "$(PREFIX)/bin/weston"; \
+	fi
 	@test -f $(WESTON_LAUNCH) && echo "✓ weston-launch built: $(WESTON_LAUNCH)" || (echo "✗ weston-launch build failed"; exit 1)
 	@touch $@

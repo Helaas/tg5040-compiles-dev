@@ -7,7 +7,7 @@ export LD_LIBRARY_PATH="$BASE/lib:$BASE/lib/libweston-10:$BASE/lib/weston${LD_LI
 export XKB_CONFIG_ROOT="$BASE/share/X11/xkb"
 export WESTON_DATA_DIR="$BASE/share/weston"
 export WESTON_CONFIG_FILE="$BASE/weston.ini"
-export WESTON_MODULE_MAP="drm-backend.so=$BASE/lib/libweston-10/drm-backend.so;headless-backend.so=$BASE/lib/libweston-10/headless-backend.so;fbdev-backend.so=$BASE/lib/libweston-10/fbdev-backend.so;fullscreen-shell.so=$BASE/lib/weston/fullscreen-shell.so;libexec_weston.so.0=$BASE/lib/weston/libexec_weston.so.0"
+export WESTON_MODULE_MAP="drm-backend.so=$BASE/lib/libweston-10/drm-backend.so;headless-backend.so=$BASE/lib/libweston-10/headless-backend.so;fbdev-backend.so=$BASE/lib/libweston-10/fbdev-backend.so;xwayland.so=$BASE/lib/libweston-10/xwayland.so;fullscreen-shell.so=$BASE/lib/weston/fullscreen-shell.so;libexec_weston.so.0=$BASE/lib/weston/libexec_weston.so.0"
 export LIBSEAT_BACKEND=seatd
 
 RUNDIR="$BASE/run"
@@ -52,7 +52,7 @@ case "$MODE" in
 		;;
 esac
 
-"$BASE/bin/weston" $BACKEND_ARGS --log="$BASE/logs/weston.log" "$@"
+"$BASE/bin/weston.bin" $BACKEND_ARGS --log="$BASE/logs/weston.log" "$@"
 STATUS=$?
 if [ -n "$SEATD_PID" ]; then
 	kill "$SEATD_PID" 2>/dev/null || true
