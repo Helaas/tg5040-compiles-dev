@@ -38,9 +38,26 @@ TARBALLS = \
 	$(SRC_DIR)/cairo-1.16.0.tar.xz \
 	$(SRC_DIR)/weston-10.0.4.tar.xz
 
-.PHONY: all deps weston bundle deploy container clean
+# Artifacts
+WESTON_LAUNCH   := $(PREFIX)/bin/weston-launch
+ZIP_BINARY      := ./zip
+
+.PHONY: all deps weston weston-launch zip verify-artifacts bundle deploy container clean clean-weston clean-zip help
 
 all: weston
+
+help:
+	@echo "Makefile targets:"
+	@echo "  make weston           - Build Weston 10.0.4 + dependencies + weston-launch (default)"
+	@echo "  make weston-launch    - Verify weston-launch binary exists and is correctly linked"
+	@echo "  make zip              - Build InfoZip 3.0 aarch64 binary"
+	@echo "  make verify-artifacts - Verify both weston-launch and zip binaries"
+	@echo "  make bundle           - Create deployable tar.gz archive"
+	@echo "  make deploy           - Deploy bundle to device via adb"
+	@echo "  make clean            - Remove all build artifacts and stamps"
+	@echo "  make clean-weston     - Remove only weston build (keep deps)"
+	@echo "  make clean-zip        - Remove only zip binary"
+	@echo "  make container        - Start/ensure build container is running"
 
 $(STAMPS):
 	@mkdir -p $(STAMPS)
@@ -73,9 +90,52 @@ deploy: bundle
 	@echo "Deploy complete. Launch with /mnt/SDCARD/Tools/tg5040/Weston.pak/launch.sh (set WESTON_HEADLESS=1 for headless)"
 
 clean:
-	rm -rf $(BUILD_DIR) $(STAMPS) $(BUILD_ROOT)/weston.tar.gz
+	rm -rf $(BUILD_DIR) $(STAMPS) $(BUILD_ROOT)/weston.tar.gz $(ZIP_BINARY)
+	@echo "Cleaned all artifacts and stamps."
+
+clean-weston:
+	rm -f $(STAMPS)/weston
+	rm -rf $(PREFIX)/bin/weston $(PREFIX)/bin/weston-launch $(PREFIX)/lib/aarch64-linux-gnu/libweston* $(PREFIX)/lib/aarch64-linux-gnu/weston
+	@echo "Cleaned weston build (keeping deps in prefix)."
+
+clean-zip:
+	rm -f $(ZIP_BINARY)
+	@echo "Cleaned zip binary."
+
+# Build and verify weston-launch (part of weston target)
+weston-launch: $(WESTON_LAUNCH)
+	@echo "✓ weston-launch verified at $(WESTON_LAUNCH)"
+	@file $(WESTON_LAUNCH) | grep -q "aarch64" && echo "✓ Binary is ARM aarch64" || (echo "✗ Binary is not aarch64"; exit 1)
+	@if command -v aarch64-linux-gnu-readelf >/dev/null 2>&1; then \
+		aarch64-linux-gnu-readelf -d $(WESTON_LAUNCH) 2>/dev/null | grep -q "libpam.so.0" && echo "✓ Linked with libpam.so.0" || (echo "⚠ libpam.so.0 not detected"; exit 1); \
+	fi
+
+$(WESTON_LAUNCH): $(STAMPS)/weston
+	@test -f $@ || (echo "✗ weston-launch not found after weston build"; exit 1)
+
+# Build InfoZip 3.0 aarch64 binary
+zip: $(ZIP_BINARY)
+	@echo "✓ InfoZip binary ready at $(ZIP_BINARY)"
+	@file $(ZIP_BINARY) | grep -q "aarch64" && echo "✓ Binary is ARM aarch64" || (echo "✗ Binary is not aarch64"; exit 1)
+	@if command -v readelf >/dev/null 2>&1; then \
+		readelf -V $(ZIP_BINARY) 2>/dev/null | grep -q "GLIBC_2.17" && echo "✓ Linked with GLIBC >= 2.17" || echo "⚠ GLIBC version not verified"; \
+	fi
+
+$(ZIP_BINARY): container
+	@echo "Building InfoZip 3.0 aarch64..."
+	@bash $(ROOT)/build-infozip.sh
+	@if [ ! -f $(ZIP_BINARY) ]; then echo "✗ zip binary not found at $(ZIP_BINARY)"; exit 1; fi
+
+# Verify both artifacts are built and valid
+verify-artifacts: weston-launch zip
+	@echo ""
+	@echo "========== Artifact Verification =========="
+	@echo "weston-launch: $$(test -f $(WESTON_LAUNCH) && echo '✓ Present' || echo '✗ Missing')"
+	@echo "zip binary:    $$(test -f $(ZIP_BINARY) && echo '✓ Present' || echo '✗ Missing')"
+	@echo "=========================================="
 
 # Individual build steps
+
 $(STAMPS)/libdrm: | $(STAMPS)
 	@$(DOCKER_EXEC) "set -euo pipefail; $(ENV_EXPORT) \
 		cd $(WORKDIR)/build/weston; mkdir -p build; cd build; \
@@ -182,8 +242,9 @@ $(STAMPS)/weston: $(STAMPS)/cairo | $(STAMPS)
 			-Drenderer-gl=false -Dbackend-drm=true -Dbackend-headless=true -Ddeprecated-backend-fbdev=true -Dbackend-default=drm \
 			-Dbackend-rdp=false -Dbackend-wayland=false -Dbackend-x11=false \
 			-Dbackend-drm-screencast-vaapi=false -Dscreenshare=false -Dpipewire=false -Dremoting=false -Dxwayland=false -Dsystemd=false \
-			-Dlauncher-logind=false -Ddeprecated-weston-launch=false -Ddeprecated-wl-shell=false \
+			-Dlauncher-logind=false -Ddeprecated-weston-launch=true -Ddeprecated-wl-shell=false \
 			-Dshell-desktop=false -Dshell-ivi=false -Dshell-kiosk=false -Dcolor-management-lcms=false -Dcolor-management-colord=false -Dimage-jpeg=false -Dimage-webp=false \
 			-Ddemo-clients=false -Dsimple-clients=shm -Dtools=info -Dwcap-decode=false -Dlauncher-libseat=true; \
 		ninja -C _build install"
+	@test -f $(WESTON_LAUNCH) && echo "✓ weston-launch built: $(WESTON_LAUNCH)" || (echo "✗ weston-launch build failed"; exit 1)
 	@touch $@
