@@ -21,6 +21,7 @@ DOWNLOADS=(
     "libXfixes-6.0.1.tar.gz:https://www.x.org/archive/individual/lib/libXfixes-6.0.1.tar.gz"
     "libXcursor-1.2.2.tar.gz:https://www.x.org/archive/individual/lib/libXcursor-1.2.2.tar.gz"
     "libepoxy-1.5.10.tar.gz:https://github.com/anholt/libepoxy/archive/refs/tags/1.5.10.tar.gz"
+    "libffi-3.3.tar.gz:https://github.com/libffi/libffi/releases/download/v3.3/libffi-3.3.tar.gz"
     "libXfont2-2.0.7.tar.gz:https://www.x.org/archive/individual/lib/libXfont2-2.0.7.tar.gz"
     "libfontenc-1.1.8.tar.gz:https://www.x.org/archive/individual/lib/libfontenc-1.1.8.tar.gz"
     "libxkbfile-1.1.3.tar.gz:https://www.x.org/archive/individual/lib/libxkbfile-1.1.3.tar.gz"
