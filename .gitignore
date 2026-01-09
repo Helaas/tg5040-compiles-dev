@@ -29,3 +29,13 @@
 /build/weston/src/*
 !/build/weston/src/*.tar.gz
 !/build/weston/src/*.tar.xz
+
+# Allow the x11 build tree overall but keep tracked sources/tools
+!/build/x11
+/build/x11/build
+/build/x11/.stamps
+/build/x11/prefix
+!/build/x11/Makefile
+!/build/x11/src
+!/build/x11/src/*.tar.gz
+!/build/x11/src/*.tar.xz
