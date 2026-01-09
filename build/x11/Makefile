@@ -139,6 +139,8 @@ $(X11_STAMPS)/xcb-proto: $(X11_TARBALLS) | $(X11_STAMPS) $(X11_BUILD_DIR)
 		./configure --prefix=\$$PREFIX; \
 		make -C src install; \
 		cp -r xcbgen \$$PREFIX/lib/; \
+		mkdir -p \$$PREFIX/local/lib/python3.12/dist-packages; \
+		cp -r xcbgen \$$PREFIX/local/lib/python3.12/dist-packages/; \
 		cp xcb-proto.pc \$$PREFIX/lib/pkgconfig/"
 	@touch $@
 
@@ -200,7 +202,7 @@ $(X11_STAMPS)/mesa: $(X11_STAMPS)/libxcb | $(X11_STAMPS)
 	@echo "✓ Skipping Mesa (complex dependency - can be added later if needed)"
 	@touch $@
 
-$(X11_STAMPS)/libX11: $(X11_STAMPS)/mesa $(X11_STAMPS)/xtrans | $(X11_STAMPS)
+$(X11_STAMPS)/libX11: $(X11_STAMPS)/mesa $(X11_STAMPS)/xtrans $(X11_STAMPS)/libxcb | $(X11_STAMPS)
 	@$(DOCKER_EXEC) "set -euo pipefail; unset PKG_CONFIG_PATH PKG_CONFIG_SYSROOT_DIR SYSROOT; export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin; $(ENV_EXPORT) \
 		$(X11_CROSS_ENV) \
 		export CFLAGS=\"-Wno-error=array-bounds \$$CFLAGS\"; export CXXFLAGS=\"\$$CFLAGS\"; \
