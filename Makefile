@@ -36,6 +36,7 @@ TARBALLS = \
 	$(SRC_DIR)/libxkbcommon-1.6.0.tar.xz \
 	$(SRC_DIR)/0.8.0.tar.gz \
 	$(SRC_DIR)/cairo-1.16.0.tar.xz \
+	$(SRC_DIR)/openssl-3.0.13.tar.gz \
 	$(SRC_DIR)/weston-10.0.4.tar.xz
 
 # Artifacts
@@ -77,7 +78,7 @@ container:
 	fi
 
 deps: | container
-deps: $(STAMPS)/libdrm $(STAMPS)/wayland $(STAMPS)/wayland-protocols $(STAMPS)/libevdev $(STAMPS)/libinput $(STAMPS)/xkeyboard-config $(STAMPS)/libxkbcommon $(STAMPS)/seatd $(STAMPS)/cairo
+deps: $(STAMPS)/libdrm $(STAMPS)/wayland $(STAMPS)/wayland-protocols $(STAMPS)/libevdev $(STAMPS)/libinput $(STAMPS)/xkeyboard-config $(STAMPS)/libxkbcommon $(STAMPS)/seatd $(STAMPS)/pixman $(STAMPS)/cairo $(STAMPS)/openssl
 
 weston: deps x11-xwayland $(STAMPS)/weston
 
@@ -250,8 +251,29 @@ $(STAMPS)/seatd: $(STAMPS)/libxkbcommon | $(STAMPS)
 		ninja -C _build install"
 	@touch $@
 
-$(STAMPS)/cairo: $(STAMPS)/seatd | $(STAMPS)
-	@$(DOCKER_EXEC) "set -euo pipefail; $(ENV_EXPORT) \
+$(STAMPS)/pixman: | $(STAMPS)
+	@$(DOCKER_EXEC) "set -euo pipefail; $(ENV_EXPORT) export PKG_CONFIG_SYSROOT_DIR=; \
+		export CC=/opt/aarch64-nextui-linux-gnu/bin/aarch64-nextui-linux-gnu-gcc \
+			AR=/opt/aarch64-nextui-linux-gnu/bin/aarch64-nextui-linux-gnu-ar \
+			RANLIB=/opt/aarch64-nextui-linux-gnu/bin/aarch64-nextui-linux-gnu-ranlib \
+			LD=/opt/aarch64-nextui-linux-gnu/bin/aarch64-nextui-linux-gnu-ld; \
+		export CFLAGS=\"--sysroot=$(SYSROOT) $${CFLAGS:-}\"; \
+		export LDFLAGS=\"--sysroot=$(SYSROOT) $${LDFLAGS:-}\"; \
+		cd $(WORKDIR)/build/weston/build; \
+		rm -rf pixman-0.42.2 && tar xf $(WORKDIR)/build/x11/src/pixman-0.42.2.tar.gz; \
+		cd pixman-0.42.2; \
+		./configure --host=aarch64-nextui-linux-gnu --prefix=\$$PREFIX --libdir=\$$PREFIX/lib; \
+		make -j$$(nproc) install"
+	@touch $@
+
+$(STAMPS)/cairo: $(STAMPS)/seatd $(STAMPS)/pixman x11-deps | $(STAMPS)
+	@$(DOCKER_EXEC) "set -euo pipefail; $(ENV_EXPORT) export PKG_CONFIG_SYSROOT_DIR=; \
+		export CC=/opt/aarch64-nextui-linux-gnu/bin/aarch64-nextui-linux-gnu-gcc \
+			AR=/opt/aarch64-nextui-linux-gnu/bin/aarch64-nextui-linux-gnu-ar \
+			RANLIB=/opt/aarch64-nextui-linux-gnu/bin/aarch64-nextui-linux-gnu-ranlib \
+			LD=/opt/aarch64-nextui-linux-gnu/bin/aarch64-nextui-linux-gnu-ld; \
+		export CFLAGS=\"--sysroot=$(SYSROOT) $${CFLAGS:-}\"; \
+		export LDFLAGS=\"--sysroot=$(SYSROOT) $${LDFLAGS:-}\"; \
 		cd $(WORKDIR)/build/weston/build; \
 		rm -rf cairo-1.16.0 && tar xf $(WORKDIR)/build/weston/src/cairo-1.16.0.tar.xz; \
 		cd cairo-1.16.0; \
@@ -262,8 +284,34 @@ $(STAMPS)/cairo: $(STAMPS)/seatd | $(STAMPS)
 		make -C src -j$$(nproc) install"
 	@touch $@
 
+$(STAMPS)/openssl: | $(STAMPS)
+	@$(DOCKER_EXEC) "set -euo pipefail; $(ENV_EXPORT) export PKG_CONFIG_SYSROOT_DIR=; \
+		if [ ! -f $(WORKDIR)/build/weston/src/openssl-3.0.13.tar.gz ]; then \
+			if command -v curl >/dev/null 2>&1; then \
+				curl -fsSL -o $(WORKDIR)/build/weston/src/openssl-3.0.13.tar.gz https://www.openssl.org/source/openssl-3.0.13.tar.gz; \
+			elif command -v wget >/dev/null 2>&1; then \
+				wget -O $(WORKDIR)/build/weston/src/openssl-3.0.13.tar.gz https://www.openssl.org/source/openssl-3.0.13.tar.gz; \
+			else \
+				echo \"curl/wget not found to download OpenSSL\"; exit 1; \
+			fi; \
+		fi; \
+		cd $(WORKDIR)/build/weston/build; \
+		rm -rf openssl-3.0.13 && tar xf $(WORKDIR)/build/weston/src/openssl-3.0.13.tar.gz; \
+		cd openssl-3.0.13; \
+		export PATH=/opt/aarch64-nextui-linux-gnu/bin:\$$PATH; \
+		export CC=aarch64-nextui-linux-gnu-gcc \
+			AR=aarch64-nextui-linux-gnu-ar \
+			RANLIB=aarch64-nextui-linux-gnu-ranlib \
+			LD=aarch64-nextui-linux-gnu-ld; \
+		export CFLAGS=\"--sysroot=$(SYSROOT) $${CFLAGS:-}\"; \
+		export LDFLAGS=\"--sysroot=$(SYSROOT) $${LDFLAGS:-}\"; \
+		CROSS_COMPILE= ./Configure linux-aarch64 --prefix=\$$PREFIX --libdir=lib shared no-tests; \
+		make -j$$(nproc) CROSS_COMPILE=; \
+		make install_sw CROSS_COMPILE="
+	@touch $@
+
 $(STAMPS)/weston: $(STAMPS)/cairo | $(STAMPS)
-	@$(DOCKER_EXEC) "set -euo pipefail; $(ENV_EXPORT) \
+	@$(DOCKER_EXEC) "set -euo pipefail; $(ENV_EXPORT) export PKG_CONFIG_SYSROOT_DIR=; \
 		cd $(WORKDIR)/build/weston/build; \
 		rm -rf weston-10.0.4 && tar xf $(WORKDIR)/build/weston/src/weston-10.0.4.tar.xz; \
 		cd weston-10.0.4; \
@@ -292,7 +340,6 @@ $(STAMPS)/weston: $(STAMPS)/cairo | $(STAMPS)
 		cp -f "$(ROOT)/build/x11/prefix/lib/libxkbfile.so"* "$(PREFIX)/lib/" 2>/dev/null || true; \
 		cp -f "$(ROOT)/build/x11/prefix/lib/libxcb.so"* "$(PREFIX)/lib/" 2>/dev/null || true; \
 		cp -f "$(ROOT)/build/x11/prefix/lib/libxcb-*.so"* "$(PREFIX)/lib/" 2>/dev/null || true; \
-		cp -f "$(ROOT)/build/x11/prefix/lib/libpixman-1.so"* "$(PREFIX)/lib/" 2>/dev/null || true; \
 	fi
 	@if [ -x "$(PREFIX)/bin/weston" ]; then \
 		mv "$(PREFIX)/bin/weston" "$(PREFIX)/bin/weston.bin"; \

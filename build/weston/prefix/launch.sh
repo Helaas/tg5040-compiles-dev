@@ -53,6 +53,9 @@ export WESTON_HEADLESS="${WESTON_HEADLESS:-0}"
 echo "=== Weston starting (headless=$WESTON_HEADLESS) ==="
 "$PAK_DIR/bin/run-weston.sh" "$@" &
 WESTON_PID=$!
+XWAYLAND_PID=
+XWM_PID=
+APP_PID=
 
 # Wait for Wayland socket
 WAYLAND_DISPLAY=
@@ -69,19 +72,61 @@ for candidate in wayland-0 wayland-1; do
 done
 [ -z "$WAYLAND_DISPLAY" ] && WAYLAND_DISPLAY=wayland-0
 
-# Fire up a simple-shm client so we see something on screen
-if [ -x "$PAK_DIR/bin/weston-simple-shm" ]; then
-	echo "=== Launching simple-shm demo ==="
-	WAYLAND_DISPLAY=$WAYLAND_DISPLAY "$PAK_DIR/bin/weston-simple-shm" >/dev/null 2>&1 &
-	DEMO_PID=$!
+if ! kill -0 "$WESTON_PID" 2>/dev/null; then
+	echo "ERROR: Weston exited before Wayland socket was ready"
+	exit 1
 fi
 
-# Keep things alive briefly for demo visibility
-sleep 15
-
-# Tear down demo and weston
-if [ -n "${DEMO_PID:-}" ]; then
-	kill "$DEMO_PID" 2>/dev/null || true
+XWAYLAND_BIN=${XWAYLAND_BIN:-}
+if [ -z "$XWAYLAND_BIN" ] && [ -x "$PAK_DIR/bin/Xwayland" ]; then
+	XWAYLAND_BIN="$PAK_DIR/bin/Xwayland"
+elif [ -z "$XWAYLAND_BIN" ] && command -v Xwayland >/dev/null 2>&1; then
+	XWAYLAND_BIN="$(command -v Xwayland)"
 fi
-kill "$WESTON_PID" 2>/dev/null || true
-wait "$WESTON_PID" 2>/dev/null || true
+
+if [ -n "$XWAYLAND_BIN" ]; then
+	XWAYLAND_LOG="$LOG_ROOT/xwayland.log"
+	echo "=== Starting Xwayland ($XWAYLAND_BIN) ==="
+	WAYLAND_DISPLAY=$WAYLAND_DISPLAY XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" \
+		"$XWAYLAND_BIN" ${XWAYLAND_ARGS:-} :0 -rootless -terminate -nolisten tcp -logfile "$XWAYLAND_LOG" &
+	XWAYLAND_PID=$!
+
+	i=0
+	while [ $i -lt 50 ]; do
+		if [ -S "/tmp/.X11-unix/X0" ] || [ -S "$XDG_RUNTIME_DIR/X11-unix/X0" ]; then
+			export DISPLAY="${DISPLAY:-:0}"
+			echo "✓ Xwayland is up on DISPLAY=$DISPLAY"
+			break
+		fi
+		if ! kill -0 "$XWAYLAND_PID" 2>/dev/null; then
+			echo "ERROR: Xwayland exited early. See $XWAYLAND_LOG"
+			kill "$WESTON_PID" 2>/dev/null || true
+			exit 1
+		fi
+		i=$((i+1))
+		sleep 0.1
+	done
+else
+	echo "WARNING: Xwayland not found (expected at $PAK_DIR/bin/Xwayland)."
+fi
+
+if [ -n "${XWM_COMMAND:-}" ]; then
+	echo "=== Starting XWM: $XWM_COMMAND ==="
+	DISPLAY="${DISPLAY:-:0}" sh -c "$XWM_COMMAND" &
+	XWM_PID=$!
+fi
+
+if [ -n "${APP_COMMAND:-}" ]; then
+	echo "=== Starting app: $APP_COMMAND ==="
+	DISPLAY="${DISPLAY:-:0}" sh -c "$APP_COMMAND" &
+	APP_PID=$!
+fi
+
+cleanup() {
+	[ -n "$APP_PID" ] && kill "$APP_PID" 2>/dev/null || true
+	[ -n "$XWM_PID" ] && kill "$XWM_PID" 2>/dev/null || true
+	[ -n "$XWAYLAND_PID" ] && kill "$XWAYLAND_PID" 2>/dev/null || true
+	[ -n "$WESTON_PID" ] && kill "$WESTON_PID" 2>/dev/null || true
+}
+trap cleanup INT TERM
+wait "$WESTON_PID"
