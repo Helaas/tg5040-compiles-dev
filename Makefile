@@ -18,6 +18,8 @@ CROSSFILE       := $(WORKDIR)/build/weston/crossfile.meson
 NATIVEFILE      := $(WORKDIR)/build/weston/native.meson
 SYSROOT         := /opt/aarch64-nextui-linux-gnu/aarch64-nextui-linux-gnu/libc
 PKG_PATH        := $(WORKDIR)/build/weston/prefix/lib/pkgconfig:$(WORKDIR)/build/weston/prefix/share/pkgconfig:$(WORKDIR)/build/x11/prefix/lib/pkgconfig:$(WORKDIR)/build/x11/prefix/share/pkgconfig
+CROSS_TRIPLE    := aarch64-nextui-linux-gnu
+CROSS_BINDIR    := /opt/aarch64-nextui-linux-gnu/bin
 
 # Helpers
 DOCKER_EXEC     = docker exec $(CONTAINER) bash -lc
@@ -42,8 +44,9 @@ TARBALLS = \
 # Artifacts
 WESTON_LAUNCH   := $(PREFIX)/bin/weston-launch
 ZIP_BINARY      := ./zip
+LDD_BINARY      := ./ldd
 
-.PHONY: all deps weston weston-launch zip x11 x11-deps x11-download x11-xwayland lwjgl glfw lwjgl-download verify-lwjgl verify-artifacts verify-x11 bundle deploy container clean clean-weston clean-zip clean-x11 clean-lwjgl help
+.PHONY: all deps weston weston-launch zip ldd x11 x11-deps x11-download x11-xwayland lwjgl glfw lwjgl-download verify-lwjgl verify-artifacts verify-x11 bundle deploy container clean clean-weston clean-zip clean-ldd clean-x11 clean-lwjgl help
 
 all: weston
 
@@ -52,6 +55,7 @@ help:
 	@echo "  make weston           - Build Weston 10.0.4 + dependencies + weston-launch (default)"
 	@echo "  make weston-launch    - Verify weston-launch binary exists and is correctly linked"
 	@echo "  make zip              - Build InfoZip 3.0 aarch64 binary"
+	@echo "  make ldd              - Build ldd utility (aarch64)"
 	@echo "  make x11              - Build X11 server + dependencies (PowerVR/OpenGL ES optimized)"
 	@echo "  make x11-deps         - Build only X11 dependencies (libX11, libXext, libXrender, mesa)"
 	@echo "  make x11-download     - Download X11 source tarballs"
@@ -69,6 +73,7 @@ help:
 	@echo "  make clean            - Remove all build artifacts and stamps"
 	@echo "  make clean-weston     - Remove only weston build (keep deps)"
 	@echo "  make clean-zip        - Remove only zip binary"
+	@echo "  make clean-ldd        - Remove only ldd binary"
 	@echo "  make container        - Start/ensure build container is running"
 
 $(STAMPS):
@@ -102,7 +107,7 @@ deploy: bundle
 	@echo "Deploy complete. Launch with /mnt/SDCARD/Tools/tg5040/Weston.pak/launch.sh (set WESTON_HEADLESS=1 for headless)"
 
 clean:
-	rm -rf $(BUILD_DIR) $(STAMPS) $(BUILD_ROOT)/weston.tar.gz $(ZIP_BINARY)
+	rm -rf $(BUILD_DIR) $(STAMPS) $(BUILD_ROOT)/weston.tar.gz $(ZIP_BINARY) $(LDD_BINARY)
 	$(MAKE) -C build/x11 clean 2>/dev/null || true
 	@echo "Cleaned all artifacts and stamps."
 
@@ -114,6 +119,10 @@ clean-weston:
 clean-zip:
 	rm -f $(ZIP_BINARY)
 	@echo "Cleaned zip binary."
+
+clean-ldd:
+	rm -f $(LDD_BINARY)
+	@echo "Cleaned ldd binary."
 
 # X11 build targets - delegate to build/x11/Makefile
 x11:
@@ -173,6 +182,17 @@ $(ZIP_BINARY): container
 	@echo "Building InfoZip 3.0 aarch64..."
 	@bash $(ROOT)/build-infozip.sh
 	@if [ ! -f $(ZIP_BINARY) ]; then echo "✗ zip binary not found at $(ZIP_BINARY)"; exit 1; fi
+
+ldd: $(LDD_BINARY)
+	@echo "✓ ldd ready at $(LDD_BINARY)"
+	@file $(LDD_BINARY) | grep -q "aarch64" && echo "✓ Binary is ARM aarch64" || (echo "✗ Binary is not aarch64"; exit 1)
+
+$(LDD_BINARY): container $(ROOT)/src/ldd-mini/ldd.c
+	@echo "Building ldd utility..."
+	@$(DOCKER_EXEC) "set -euo pipefail; \
+		$(CROSS_BINDIR)/$(CROSS_TRIPLE)-gcc --sysroot=$(SYSROOT) -O2 -s \
+			-o $(WORKDIR)/ldd $(WORKDIR)/src/ldd-mini/ldd.c"
+	@if [ ! -f $(LDD_BINARY) ]; then echo "✗ ldd binary not found at $(LDD_BINARY)"; exit 1; fi
 
 # Verify both artifacts are built and valid
 verify-artifacts: weston-launch zip
