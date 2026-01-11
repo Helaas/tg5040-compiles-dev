@@ -39,3 +39,12 @@
 !/build/x11/src
 !/build/x11/src/*.tar.gz
 !/build/x11/src/*.tar.xz
+
+# Allow the lwjgl build tree overall but keep tracked sources/tools
+!/build/lwjgl
+/build/lwjgl/build
+/build/lwjgl/.stamps
+/build/lwjgl/prefix
+!/build/lwjgl/Makefile
+!/build/lwjgl/src
+!/build/lwjgl/src/*.tar.gz

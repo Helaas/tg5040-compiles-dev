@@ -43,7 +43,7 @@ TARBALLS = \
 WESTON_LAUNCH   := $(PREFIX)/bin/weston-launch
 ZIP_BINARY      := ./zip
 
-.PHONY: all deps weston weston-launch zip x11 x11-deps x11-download x11-xwayland verify-artifacts verify-x11 bundle deploy container clean clean-weston clean-zip clean-x11 help
+.PHONY: all deps weston weston-launch zip x11 x11-deps x11-download x11-xwayland lwjgl glfw lwjgl-download verify-lwjgl verify-artifacts verify-x11 bundle deploy container clean clean-weston clean-zip clean-x11 clean-lwjgl help
 
 all: weston
 
@@ -56,9 +56,14 @@ help:
 	@echo "  make x11-deps         - Build only X11 dependencies (libX11, libXext, libXrender, mesa)"
 	@echo "  make x11-download     - Download X11 source tarballs"
 	@echo "  make x11-xwayland     - Build Xwayland binary for Weston"
+	@echo "  make lwjgl            - Build LWJGL natives for linux/arm64"
+	@echo "  make glfw             - Build GLFW for Wayland/EGL (aarch64)"
+	@echo "  make lwjgl-download   - Download LWJGL source tarball"
+	@echo "  make verify-lwjgl     - Verify LWJGL GLIBC compatibility"
 	@echo "  make verify-artifacts - Verify both weston-launch and zip binaries"
 	@echo "  make verify-x11       - Verify X11 server binary and OpenGL support"
 	@echo "  make clean-x11        - Remove only X11 build (keep sources)"
+	@echo "  make clean-lwjgl      - Remove only LWJGL build (keep sources)"
 	@echo "  make bundle           - Create deployable tar.gz archive"
 	@echo "  make deploy           - Deploy bundle to device via adb"
 	@echo "  make clean            - Remove all build artifacts and stamps"
@@ -128,6 +133,22 @@ verify-x11:
 
 clean-x11:
 	$(MAKE) -C build/x11 clean-x11
+
+# LWJGL build targets - delegate to build/lwjgl/Makefile
+lwjgl: container
+	$(MAKE) -C build/lwjgl lwjgl
+
+glfw: container
+	$(MAKE) -C build/lwjgl glfw
+
+lwjgl-download:
+	$(MAKE) -C build/lwjgl download
+
+verify-lwjgl:
+	$(MAKE) -C build/lwjgl verify
+
+clean-lwjgl:
+	$(MAKE) -C build/lwjgl clean-lwjgl
 
 # Build and verify weston-launch (part of weston target)
 weston-launch: $(WESTON_LAUNCH)
