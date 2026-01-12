@@ -380,6 +380,8 @@ $(STAMPS)/weston: $(STAMPS)/cairo | $(STAMPS)
 		cp -f "$(ROOT)/build/x11/prefix/lib/libxkbfile.so"* "$(PREFIX)/lib/" 2>/dev/null || true; \
 		cp -f "$(ROOT)/build/x11/prefix/lib/libxcb.so"* "$(PREFIX)/lib/" 2>/dev/null || true; \
 		cp -f "$(ROOT)/build/x11/prefix/lib/libxcb-*.so"* "$(PREFIX)/lib/" 2>/dev/null || true; \
+		cp -f "$(ROOT)/build/x11/prefix/lib/libopenal.so"* "$(PREFIX)/lib/" 2>/dev/null || true; \
+		cp -f "$(ROOT)/build/x11/prefix/lib/libSDL3.so"* "$(PREFIX)/lib/" 2>/dev/null || true; \
 	fi
 	@if [ -x "$(PREFIX)/bin/weston" ]; then \
 		mv "$(PREFIX)/bin/weston" "$(PREFIX)/bin/weston.bin"; \

@@ -46,10 +46,26 @@ GLFW_BUILD_DIR  := $(LWJGL_BUILD_DIR)/glfw-$(GLFW_VERSION)
 GLFW_INSTALL    := $(WORKDIR)/build/x11/prefix
 GLFW_STAMP      := $(LWJGL_STAMPS)/glfw
 
+# OpenAL Soft (GLIBC <= 2.33)
+OPENAL_VERSION  := 1.23.1
+OPENAL_TARBALL  := openal-soft-$(OPENAL_VERSION).tar.gz
+OPENAL_ARCHIVE  := $(LWJGL_SRC_DIR)/$(OPENAL_TARBALL)
+OPENAL_BUILD_DIR:= $(LWJGL_BUILD_DIR)/openal-soft-$(OPENAL_VERSION)
+OPENAL_INSTALL  := $(WORKDIR)/build/x11/prefix
+OPENAL_STAMP    := $(LWJGL_STAMPS)/openal
+
+# SDL3 (GLIBC <= 2.33)
+SDL3_VERSION    := main
+SDL3_TARBALL    := SDL3-$(SDL3_VERSION)-src.tar.gz
+SDL3_ARCHIVE    := $(LWJGL_SRC_DIR)/$(SDL3_TARBALL)
+SDL3_BUILD_DIR  := $(LWJGL_BUILD_DIR)/SDL-$(SDL3_VERSION)
+SDL3_INSTALL    := $(WORKDIR)/build/x11/prefix
+SDL3_STAMP      := $(LWJGL_STAMPS)/sdl3
+
 # GLIBC guardrail: device max is GLIBC_2.33.
 GLIBC_MAX ?= 2.33
 
-.PHONY: all lwjgl glfw download verify clean clean-lwjgl container help
+.PHONY: all lwjgl glfw openal sdl3 download verify clean clean-lwjgl container help
 
 all: lwjgl
 
@@ -57,6 +73,8 @@ help:
 	@echo "LWJGL Build Targets:"
 	@echo "  make lwjgl            - Build LWJGL natives for linux/arm64"
 	@echo "  make glfw             - Build GLFW for Wayland/EGL (aarch64)"
+	@echo "  make openal           - Build OpenAL Soft (GLIBC<=2.33)"
+	@echo "  make sdl3             - Build SDL3 (GLIBC<=2.33, Wayland-only)"
 	@echo "  make download         - Download LWJGL sources"
 	@echo "  make verify           - Verify GLIBC version of built libs"
 	@echo "  make clean-lwjgl      - Remove LWJGL build artifacts (keep sources)"
@@ -71,18 +89,24 @@ container:
 		docker start $(CONTAINER) >/dev/null; \
 	fi
 
-download: $(LWJGL_ARCHIVE) $(GLFW_ARCHIVE)
-	@echo "✓ LWJGL/GLFW sources downloaded"
+download: $(LWJGL_ARCHIVE) $(GLFW_ARCHIVE) $(OPENAL_ARCHIVE) $(SDL3_ARCHIVE)
+	@echo "✓ LWJGL/GLFW/OpenAL/SDL3 sources downloaded"
 
-lwjgl: container $(GLFW_STAMP) $(LWJGL_STAMP)
+lwjgl: container $(GLFW_STAMP) $(OPENAL_STAMP) $(SDL3_STAMP) $(LWJGL_STAMP)
 	@echo "✓ LWJGL natives built in $(LWJGL_OUT_LIB)"
 
 glfw: container $(GLFW_STAMP)
 	@echo "✓ GLFW built in $(LWJGL_PREFIX)/lib"
 
+openal: container $(OPENAL_STAMP)
+	@echo "✓ OpenAL Soft built in $(OPENAL_INSTALL)/lib"
+
+sdl3: container $(SDL3_STAMP)
+	@echo "✓ SDL3 built in $(SDL3_INSTALL)/lib"
+
 verify: container $(LWJGL_STAMP)
 	@$(DOCKER_EXEC) "set -euo pipefail; \
-		for lib in $(WORKDIR)/build/lwjgl/prefix/lib/liblwjgl*.so $(WORKDIR)/build/x11/prefix/lib/libglfw.so.3*; do \
+		for lib in $(WORKDIR)/build/lwjgl/prefix/lib/liblwjgl*.so $(WORKDIR)/build/x11/prefix/lib/libglfw.so.3* $(WORKDIR)/build/x11/prefix/lib/libopenal.so* $(WORKDIR)/build/x11/prefix/lib/libSDL3.so*; do \
 			[ -f \"\$$lib\" ] || continue; \
 			max=\$$(/opt/aarch64-nextui-linux-gnu/bin/$(CROSS_TRIPLE)-readelf -V \"\$$lib\" | sed -n 's/.*Name: GLIBC_\\([0-9.]*\\).*/\\1/p' | sort -V | tail -1); \
 			if [ -n \"\$$max\" ]; then \
@@ -105,6 +129,14 @@ $(GLFW_ARCHIVE): | $(LWJGL_SRC_DIR)
 	@curl -L -o "$(GLFW_ARCHIVE)" "https://github.com/glfw/glfw/archive/refs/tags/$(GLFW_VERSION).tar.gz"
 	@echo "Verifying GLFW archive..."
 	@python3 -c 'import hashlib, pathlib, sys; p=pathlib.Path("$(GLFW_ARCHIVE)"); exp="$(GLFW_SHA256)"; dig=hashlib.sha256(p.read_bytes()).hexdigest(); sys.exit(f"SHA256 mismatch for {p}\\nExpected: {exp}\\nActual:   {dig}\\n") if dig!=exp else print(f"Verified {p.name}")'
+
+$(OPENAL_ARCHIVE): | $(LWJGL_SRC_DIR)
+	@echo "Downloading OpenAL Soft sources..."
+	@curl -L -o "$(OPENAL_ARCHIVE)" "https://github.com/kcat/openal-soft/archive/refs/tags/$(OPENAL_VERSION).tar.gz"
+
+$(SDL3_ARCHIVE): | $(LWJGL_SRC_DIR)
+	@echo "Downloading SDL3 sources..."
+	@curl -L -o "$(SDL3_ARCHIVE)" "https://github.com/libsdl-org/SDL/archive/refs/heads/main.tar.gz"
 
 $(GLFW_STAMP): container $(GLFW_ARCHIVE) | $(LWJGL_BUILD_DIR) $(LWJGL_PREFIX) $(LWJGL_STAMPS)
 	@echo "Building GLFW $(GLFW_VERSION) for Wayland/EGL..."
@@ -145,6 +177,85 @@ $(GLFW_STAMP): container $(GLFW_ARCHIVE) | $(LWJGL_BUILD_DIR) $(LWJGL_PREFIX) $(
 			-DGLFW_BUILD_TESTS=OFF; \
 		ninja install"
 	@touch "$(GLFW_STAMP)"
+
+$(OPENAL_STAMP): container $(OPENAL_ARCHIVE) | $(LWJGL_BUILD_DIR) $(LWJGL_STAMPS)
+	@echo "Building OpenAL Soft $(OPENAL_VERSION)..."
+	@set -euo pipefail; \
+	rm -rf "$(OPENAL_BUILD_DIR)"; \
+	tar -xzf "$(OPENAL_ARCHIVE)" -C "$(LWJGL_BUILD_DIR)"; \
+	$(DOCKER_EXEC) "set -euo pipefail; \
+		apt-get update >/dev/null; \
+		DEBIAN_FRONTEND=noninteractive apt-get install -y cmake ninja-build pkg-config >/dev/null; \
+		export PATH=$(CROSS_BINDIR):\$$PATH; \
+		export PKG_CONFIG_PATH=$(PKG_PATH); \
+		export PKG_CONFIG_LIBDIR=$(PKG_PATH); \
+		export PKG_CONFIG_SYSROOT_DIR=; \
+		cd $(WORKDIR)/build/lwjgl/build/openal-soft-$(OPENAL_VERSION); \
+		mkdir -p build && cd build; \
+		cmake -G Ninja .. \
+			-DCMAKE_SYSTEM_NAME=Linux \
+			-DCMAKE_SYSTEM_PROCESSOR=aarch64 \
+			-DCMAKE_SYSROOT=$(SYSROOT) \
+			-DCMAKE_C_COMPILER=$(CROSS_BINDIR)/$(CROSS_TRIPLE)-gcc \
+			-DCMAKE_CXX_COMPILER=$(CROSS_BINDIR)/$(CROSS_TRIPLE)-g++ \
+			-DCMAKE_FIND_ROOT_PATH=$(SYSROOT) \
+			-DCMAKE_FIND_ROOT_PATH_MODE_LIBRARY=ONLY \
+			-DCMAKE_FIND_ROOT_PATH_MODE_INCLUDE=ONLY \
+			-DCMAKE_FIND_ROOT_PATH_MODE_PACKAGE=ONLY \
+			-DCMAKE_INSTALL_PREFIX=$(OPENAL_INSTALL) \
+			-DALSOFT_BUILD_TESTS=OFF \
+			-DALSOFT_EXAMPLES=OFF \
+			-DALSOFT_UTILS=OFF \
+			-DALSOFT_NO_CONFIG_UTIL=ON \
+			-DALSOFT_REQUIRE_DBUS=OFF \
+			-DALSOFT_RTKIT=OFF \
+			-DALSOFT_BACKEND_PULSEAUDIO=OFF \
+			-DALSOFT_BACKEND_JACK=OFF \
+			-DALSOFT_BACKEND_PIPEWIRE=OFF \
+			-DALSOFT_BACKEND_ALSA=OFF \
+			-DALSOFT_BACKEND_OSS=OFF \
+			-DALSOFT_BACKEND_WAVE=ON; \
+		ninja -C $(WORKDIR)/build/lwjgl/build/openal-soft-$(OPENAL_VERSION)/build install"
+	@touch "$(OPENAL_STAMP)"
+
+$(SDL3_STAMP): container $(SDL3_ARCHIVE) | $(LWJGL_BUILD_DIR) $(LWJGL_STAMPS)
+	@echo "Building SDL3 $(SDL3_VERSION) (Wayland-only)..."
+	@set -euo pipefail; \
+	rm -rf "$(SDL3_BUILD_DIR)"; \
+	tar -xzf "$(SDL3_ARCHIVE)" -C "$(LWJGL_BUILD_DIR)"; \
+	$(DOCKER_EXEC) "set -euo pipefail; \
+		apt-get update >/dev/null; \
+		DEBIAN_FRONTEND=noninteractive apt-get install -y cmake ninja-build pkg-config >/dev/null; \
+		export PATH=$(CROSS_BINDIR):\$$PATH; \
+		export PKG_CONFIG_PATH=$(PKG_PATH); \
+		export PKG_CONFIG_LIBDIR=$(PKG_PATH); \
+		export PKG_CONFIG_SYSROOT_DIR=; \
+		cd $(WORKDIR)/build/lwjgl/build/SDL-$(SDL3_VERSION); \
+		mkdir -p build && cd build; \
+		cmake -G Ninja .. \
+			-DCMAKE_SYSTEM_NAME=Linux \
+			-DCMAKE_SYSTEM_PROCESSOR=aarch64 \
+			-DCMAKE_SYSROOT=$(SYSROOT) \
+			-DCMAKE_C_COMPILER=$(CROSS_BINDIR)/$(CROSS_TRIPLE)-gcc \
+			-DCMAKE_CXX_COMPILER=$(CROSS_BINDIR)/$(CROSS_TRIPLE)-g++ \
+			-DCMAKE_FIND_ROOT_PATH=$(SYSROOT) \
+			-DCMAKE_FIND_ROOT_PATH_MODE_LIBRARY=ONLY \
+			-DCMAKE_FIND_ROOT_PATH_MODE_INCLUDE=ONLY \
+			-DCMAKE_FIND_ROOT_PATH_MODE_PACKAGE=ONLY \
+			-DCMAKE_INSTALL_PREFIX=$(SDL3_INSTALL) \
+			-DSDL_INSTALL=ON -DSDL_INSTALL_TESTS=OFF \
+			-DSDL_SHARED=ON -DSDL_STATIC=OFF \
+			-DSDL_TEST=OFF -DSDL_TEST_LIBRARY=OFF \
+			-DSDL_DBUS=OFF -DSDL_IBUS=OFF \
+			-DSDL_LIBUDEV=ON \
+			-DSDL_LIBUSB=OFF -DSDL_HIDAPI_LIBUSB=OFF \
+			-DSDL_WAYLAND=ON -DSDL_WAYLAND_LIBDECOR=OFF -DSDL_WAYLAND_WSI=OFF \
+			-DSDL_X11=OFF \
+			-DSDL_ALSA=OFF -DSDL_PULSEAUDIO=OFF -DSDL_PIPEWIRE=OFF -DSDL_JACK=OFF \
+			-DSDL_VULKAN=OFF -DSDL_OPENGL=OFF -DSDL_OPENGLES=OFF \
+			-DSDL_HIDAPI=ON; \
+		ninja -C $(WORKDIR)/build/lwjgl/build/SDL-$(SDL3_VERSION)/build install"
+	@touch "$(SDL3_STAMP)"
 
 $(LWJGL_STAMP): container $(LWJGL_ARCHIVE) | $(LWJGL_BUILD_DIR) $(LWJGL_PREFIX) $(LWJGL_STAMPS)
 	@echo "Building LWJGL natives (linux/arm64)..."
