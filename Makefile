@@ -389,7 +389,7 @@ $(STAMPS)/weston: $(STAMPS)/cairo | $(STAMPS)
 			'export XKB_CONFIG_ROOT="$$BASE/share/X11/xkb"' \
 			'export WESTON_DATA_DIR="$$BASE/share/weston"' \
 			'export WESTON_CONFIG_FILE="$$BASE/weston.ini"' \
-			'export WESTON_MODULE_MAP="drm-backend.so=$$BASE/lib/libweston-10/drm-backend.so;headless-backend.so=$$BASE/lib/libweston-10/headless-backend.so;fbdev-backend.so=$$BASE/lib/libweston-10/fbdev-backend.so;xwayland.so=$$BASE/lib/libweston-10/xwayland.so;fullscreen-shell.so=$$BASE/lib/weston/fullscreen-shell.so;libexec_weston.so.0=$$BASE/lib/weston/libexec_weston.so.0"' \
+			'export WESTON_MODULE_MAP="drm-backend.so=$$BASE/lib/libweston-10/drm-backend.so;headless-backend.so=$$BASE/lib/libweston-10/headless-backend.so;fbdev-backend.so=$$BASE/lib/libweston-10/fbdev-backend.so;xwayland.so=$$BASE/lib/libweston-10/xwayland.so;fullscreen-shell.so=$$BASE/lib/weston/fullscreen-shell.so;desktop-shell.so=$$BASE/lib/weston/desktop-shell.so;libexec_weston.so.0=$$BASE/lib/weston/libexec_weston.so.0"' \
 			'export LIBSEAT_BACKEND=seatd' \
 			'exec "$$BASE/bin/weston.bin" "$$@"' \
 			> "$(PREFIX)/bin/weston"; \

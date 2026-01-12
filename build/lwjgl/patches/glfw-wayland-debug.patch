@@ -1,0 +1,141 @@
+--- a/src/wl_init.c	2024-02-23 12:45:31
++++ b/src/wl_init.c	2026-01-12 23:01:19
+@@ -109,21 +109,32 @@
+                                  const char* interface,
+                                  uint32_t version)
+ {
++    // Debug trace every global announced by the compositor
++    fprintf(stderr, "[glfw-wl-debug] global %-35s name=%u version=%u\n",
++            interface, name, version);
++
+     if (strcmp(interface, "wl_compositor") == 0)
+     {
+-        _glfw.wl.compositor =
+-            wl_registry_bind(registry, name, &wl_compositor_interface,
+-                             _glfw_min(3, version));
++        _glfw.wl.compositor = wl_registry_bind(registry,
++                                               name,
++                                               &wl_compositor_interface,
++                                               _glfw_min(3, version));
++        fprintf(stderr, "[glfw-wl-debug] bind wl_compositor -> %p\n",
++                (void*) _glfw.wl.compositor);
+     }
+     else if (strcmp(interface, "wl_subcompositor") == 0)
+     {
+         _glfw.wl.subcompositor =
+             wl_registry_bind(registry, name, &wl_subcompositor_interface, 1);
++        fprintf(stderr, "[glfw-wl-debug] bind wl_subcompositor -> %p\n",
++                (void*) _glfw.wl.subcompositor);
+     }
+     else if (strcmp(interface, "wl_shm") == 0)
+     {
+         _glfw.wl.shm =
+             wl_registry_bind(registry, name, &wl_shm_interface, 1);
++        fprintf(stderr, "[glfw-wl-debug] bind wl_shm -> %p\n",
++                (void*) _glfw.wl.shm);
+     }
+     else if (strcmp(interface, "wl_output") == 0)
+     {
+@@ -137,6 +148,8 @@
+                 wl_registry_bind(registry, name, &wl_seat_interface,
+                                  _glfw_min(4, version));
+             _glfwAddSeatListenerWayland(_glfw.wl.seat);
++            fprintf(stderr, "[glfw-wl-debug] bind wl_seat -> %p\n",
++                    (void*) _glfw.wl.seat);
+         }
+     }
+     else if (strcmp(interface, "wl_data_device_manager") == 0)
+@@ -146,6 +159,9 @@
+             _glfw.wl.dataDeviceManager =
+                 wl_registry_bind(registry, name,
+                                  &wl_data_device_manager_interface, 1);
++            fprintf(stderr,
++                    "[glfw-wl-debug] bind wl_data_device_manager -> %p\n",
++                    (void*) _glfw.wl.dataDeviceManager);
+         }
+     }
+     else if (strcmp(interface, "xdg_wm_base") == 0)
+@@ -153,6 +169,8 @@
+         _glfw.wl.wmBase =
+             wl_registry_bind(registry, name, &xdg_wm_base_interface, 1);
+         xdg_wm_base_add_listener(_glfw.wl.wmBase, &wmBaseListener, NULL);
++        fprintf(stderr, "[glfw-wl-debug] bind xdg_wm_base -> %p\n",
++                (void*) _glfw.wl.wmBase);
+     }
+     else if (strcmp(interface, "zxdg_decoration_manager_v1") == 0)
+     {
+@@ -160,11 +178,16 @@
+             wl_registry_bind(registry, name,
+                              &zxdg_decoration_manager_v1_interface,
+                              1);
++        fprintf(stderr,
++                "[glfw-wl-debug] bind zxdg_decoration_manager_v1 -> %p\n",
++                (void*) _glfw.wl.decorationManager);
+     }
+     else if (strcmp(interface, "wp_viewporter") == 0)
+     {
+         _glfw.wl.viewporter =
+             wl_registry_bind(registry, name, &wp_viewporter_interface, 1);
++        fprintf(stderr, "[glfw-wl-debug] bind wp_viewporter -> %p\n",
++                (void*) _glfw.wl.viewporter);
+     }
+     else if (strcmp(interface, "zwp_relative_pointer_manager_v1") == 0)
+     {
+@@ -172,6 +195,9 @@
+             wl_registry_bind(registry, name,
+                              &zwp_relative_pointer_manager_v1_interface,
+                              1);
++        fprintf(stderr,
++                "[glfw-wl-debug] bind zwp_relative_pointer_manager_v1 -> %p\n",
++                (void*) _glfw.wl.relativePointerManager);
+     }
+     else if (strcmp(interface, "zwp_pointer_constraints_v1") == 0)
+     {
+@@ -179,6 +205,9 @@
+             wl_registry_bind(registry, name,
+                              &zwp_pointer_constraints_v1_interface,
+                              1);
++        fprintf(stderr,
++                "[glfw-wl-debug] bind zwp_pointer_constraints_v1 -> %p\n",
++                (void*) _glfw.wl.pointerConstraints);
+     }
+     else if (strcmp(interface, "zwp_idle_inhibit_manager_v1") == 0)
+     {
+@@ -186,6 +215,9 @@
+             wl_registry_bind(registry, name,
+                              &zwp_idle_inhibit_manager_v1_interface,
+                              1);
++        fprintf(stderr,
++                "[glfw-wl-debug] bind zwp_idle_inhibit_manager_v1 -> %p\n",
++                (void*) _glfw.wl.idleInhibitManager);
+     }
+     else if (strcmp(interface, "xdg_activation_v1") == 0)
+     {
+@@ -193,6 +225,8 @@
+             wl_registry_bind(registry, name,
+                              &xdg_activation_v1_interface,
+                              1);
++        fprintf(stderr, "[glfw-wl-debug] bind xdg_activation_v1 -> %p\n",
++                (void*) _glfw.wl.activationManager);
+     }
+     else if (strcmp(interface, "wp_fractional_scale_manager_v1") == 0)
+     {
+@@ -200,6 +234,9 @@
+             wl_registry_bind(registry, name,
+                              &wp_fractional_scale_manager_v1_interface,
+                              1);
++        fprintf(stderr,
++                "[glfw-wl-debug] bind wp_fractional_scale_manager_v1 -> %p\n",
++                (void*) _glfw.wl.fractionalScaleManager);
+     }
+ }
+ 
+@@ -598,6 +635,8 @@
+         _glfwPlatformGetModuleSymbol(_glfw.wl.client.handle, "wl_proxy_set_tag");
+     _glfw.wl.client.proxy_get_version = (PFN_wl_proxy_get_version)
+         _glfwPlatformGetModuleSymbol(_glfw.wl.client.handle, "wl_proxy_get_version");
++    fprintf(stderr, "[glfw-wl-debug] wl_proxy_get_version resolve -> %p\n",
++            (void*) _glfw.wl.client.proxy_get_version);
+     _glfw.wl.client.proxy_marshal_flags = (PFN_wl_proxy_marshal_flags)
+         _glfwPlatformGetModuleSymbol(_glfw.wl.client.handle, "wl_proxy_marshal_flags");
+ 

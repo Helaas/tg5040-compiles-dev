@@ -111,6 +111,9 @@ $(GLFW_STAMP): container $(GLFW_ARCHIVE) | $(LWJGL_BUILD_DIR) $(LWJGL_PREFIX) $(
 	@set -euo pipefail; \
 	rm -rf "$(GLFW_BUILD_DIR)"; \
 	tar -xzf "$(GLFW_ARCHIVE)" -C "$(LWJGL_BUILD_DIR)"; \
+	if [ -f "$(WORKDIR)/build/lwjgl/patches/glfw-wayland-debug.patch" ]; then \
+		cd "$(GLFW_BUILD_DIR)" && patch -p1 < "$(WORKDIR)/build/lwjgl/patches/glfw-wayland-debug.patch"; \
+	fi; \
 	$(DOCKER_EXEC) "set -euo pipefail; \
 		apt-get update >/dev/null; \
 		DEBIAN_FRONTEND=noninteractive apt-get install -y cmake ninja-build pkg-config >/dev/null; \
@@ -135,6 +138,7 @@ $(GLFW_STAMP): container $(GLFW_ARCHIVE) | $(LWJGL_BUILD_DIR) $(LWJGL_PREFIX) $(
 			-DBUILD_SHARED_LIBS=ON \
 			-DGLFW_BUILD_WAYLAND=ON \
 			-DGLFW_BUILD_X11=OFF \
+			-DGLFW_USE_LIBDECOR=OFF \
 			-DGLFW_USE_OSMESA=OFF \
 			-DGLFW_BUILD_DOCS=OFF \
 			-DGLFW_BUILD_EXAMPLES=OFF \
