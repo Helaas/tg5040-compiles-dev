@@ -7,6 +7,8 @@ X11_SRC_DIR     := $(X11_BUILD_ROOT)/src
 X11_BUILD_DIR   := $(X11_BUILD_ROOT)/build
 X11_PREFIX      := $(X11_BUILD_ROOT)/prefix
 X11_STAMPS      := $(X11_BUILD_ROOT)/.stamps
+# Runtime install location baked into Xwayland (where it will live on device)
+RUNTIME_PREFIX  := /mnt/SDCARD/Tools/tg5040/test.pak
 
 # Toolchain / container (shared with weston)
 CONTAINER       ?= weston-build
@@ -45,6 +47,7 @@ X11_TARBALLS = \
 	$(X11_SRC_DIR)/xorgproto-2024.1.tar.xz \
 	$(X11_SRC_DIR)/xtrans-1.6.0.tar.gz \
 	$(X11_SRC_DIR)/libXau-1.0.12.tar.gz \
+	$(X11_SRC_DIR)/libXdmcp-1.1.3.tar.gz \
 	$(X11_SRC_DIR)/libxcb-1.16.tar.xz \
 	$(X11_SRC_DIR)/pixman-0.42.2.tar.gz \
 	$(X11_SRC_DIR)/libfontenc-1.1.8.tar.gz \
@@ -57,8 +60,12 @@ X11_TARBALLS = \
 	$(X11_SRC_DIR)/libXrender-0.9.11.tar.gz \
 	$(X11_SRC_DIR)/libXfixes-6.0.1.tar.gz \
 	$(X11_SRC_DIR)/libXcursor-1.2.2.tar.gz \
+	$(X11_SRC_DIR)/libXrandr-1.5.4.tar.gz \
+	$(X11_SRC_DIR)/libxshmfence-1.3.2.tar.gz \
+	$(X11_SRC_DIR)/libXxf86vm-1.1.4.tar.gz \
 	$(X11_SRC_DIR)/libepoxy-1.5.10.tar.gz \
 	$(X11_SRC_DIR)/libffi-3.3.tar.gz \
+	$(X11_SRC_DIR)/xkbcomp-1.4.6.tar.gz \
 	$(X11_SRC_DIR)/xorg-server-1.20.14.tar.gz
 
 # Artifacts
@@ -66,7 +73,7 @@ X11_SERVER      := $(X11_PREFIX)/bin/Xorg
 X11_XWAYLAND    := $(X11_PREFIX)/bin/Xwayland
 X11_LIBS        := $(X11_PREFIX)/lib/libX11.so $(X11_PREFIX)/lib/libGL.so
 
-.PHONY: all deps x11 x11-deps x11-xwayland verify-x11 clean clean-x11 download help
+.PHONY: all deps x11 x11-deps x11-xwayland glxinfo mesa-wayland-egl verify-x11 clean clean-x11 download help
 
 help:
 	@echo "X11 Build Targets:"
@@ -101,7 +108,12 @@ $(X11_SRC_DIR)/%.tar.gz: | $(X11_SRC_DIR)
 		libfontenc-*.tar.gz) curl -fsSL "https://www.x.org/archive/individual/lib/$(@F)" -o $@ ;; \
 		pixman-*.tar.gz) curl -fsSL "https://www.x.org/archive/individual/lib/$(@F)" -o $@ ;; \
 		libXau-*.tar.gz) curl -fsSL "https://www.x.org/archive/individual/lib/$(@F)" -o $@ ;; \
+		libXdmcp-*.tar.gz) curl -fsSL "https://www.x.org/archive/individual/lib/$(@F)" -o $@ ;; \
+		libXrandr-*.tar.gz) curl -fsSL "https://www.x.org/archive/individual/lib/$(@F)" -o $@ ;; \
 		libX11-*.tar.gz | libXext-*.tar.gz | libXrender-*.tar.gz | libXfixes-*.tar.gz | libXcursor-*.tar.gz | libXfont2-*.tar.gz | libxkbfile-*.tar.gz) curl -fsSL "https://www.x.org/archive/individual/lib/$(@F)" -o $@ ;; \
+		libxshmfence-*.tar.gz) curl -fsSL "https://www.x.org/archive/individual/lib/$(@F)" -o $@ ;; \
+		libXxf86vm-*.tar.gz) curl -fsSL "https://www.x.org/archive/individual/lib/$(@F)" -o $@ ;; \
+		xkbcomp-*.tar.gz) curl -fsSL "https://www.x.org/archive/individual/app/$(@F)" -o $@ ;; \
 		libepoxy-*.tar.gz) curl -fsSL "https://github.com/anholt/libepoxy/archive/refs/tags/1.5.10.tar.gz" -o $@ ;; \
 		libffi-*.tar.gz) curl -fsSL "https://github.com/libffi/libffi/releases/download/v3.3/$(@F)" -o $@ ;; \
 		util-macros-*.tar.gz) curl -fsSL "https://www.x.org/archive/individual/util/$(@F)" -o $@ ;; \
@@ -121,11 +133,17 @@ $(X11_BUILD_DIR):
 # X11 build targets (PowerVR GPU optimized with OpenGL ES support)
 # Build order: xcb-proto -> xproto -> libXau -> libxcb -> mesa (OpenGL) -> libX11 -> libXext -> libXrender -> X11 server
 
-x11: $(X11_STAMPS)/x11-server
+x11: $(X11_STAMPS)/x11-server $(X11_STAMPS)/glxinfo
 	@echo "✓ X11 server built successfully at $(X11_SERVER)"
 
-x11-deps: $(X11_STAMPS)/x11-libs
+x11-deps: $(X11_STAMPS)/x11-libs $(X11_STAMPS)/xkbcomp
 	@echo "✓ X11 libraries and dependencies built"
+
+mesa-wayland-egl: $(X11_STAMPS)/mesa-wayland-egl
+	@echo "✓ Mesa (Wayland/EGL swrast) built: $(X11_PREFIX)/lib (egl/gbm/swrast_dri.so)"
+
+glxinfo: $(X11_STAMPS)/glxinfo
+	@echo "✓ glxinfo built: $(X11_PREFIX)/bin/glxinfo"
 
 x11-xwayland: $(X11_STAMPS)/x11-server
 	@test -f $(X11_XWAYLAND) && echo "✓ Xwayland built: $(X11_XWAYLAND)" || (echo "✗ Xwayland build failed"; exit 1)
@@ -181,7 +199,17 @@ $(X11_STAMPS)/libxau: $(X11_STAMPS)/xproto | $(X11_STAMPS)
 		rm -rf libXau-1.0.12 && tar xf $(WORKDIR)/build/x11/src/libXau-1.0.12.tar.gz; \
 		cd libXau-1.0.12; \
 		cp -r \$$PREFIX/include/X11/* include/X11/; \
-		./configure --host=$(CROSS_TRIPLE) --prefix=\$$PREFIX --libdir=\$$PREFIX/lib; \
+	./configure --host=$(CROSS_TRIPLE) --prefix=\$$PREFIX --libdir=\$$PREFIX/lib; \
+	make -j$$(nproc) install"
+	@touch $@
+
+$(X11_STAMPS)/libXdmcp: $(X11_STAMPS)/xproto | $(X11_STAMPS)
+	@$(DOCKER_EXEC) "set -euo pipefail; export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin; $(ENV_EXPORT) \
+		$(X11_CROSS_ENV) \
+		cd $(WORKDIR)/build/x11/build; \
+		rm -rf libXdmcp-1.1.3 && tar xf $(WORKDIR)/build/x11/src/libXdmcp-1.1.3.tar.gz; \
+		cd libXdmcp-1.1.3; \
+		./configure --host=$(CROSS_TRIPLE) --prefix=\$$PREFIX --libdir=\$$PREFIX/lib --disable-shared --enable-static --with-pic; \
 		make -j$$(nproc) install"
 	@touch $@
 
@@ -198,11 +226,51 @@ $(X11_STAMPS)/libxcb: $(X11_STAMPS)/libxau | $(X11_STAMPS)
 		make -j$$(nproc) install"
 	@touch $@
 
-$(X11_STAMPS)/mesa: $(X11_STAMPS)/libxcb | $(X11_STAMPS)
-	@echo "✓ Skipping Mesa (complex dependency - can be added later if needed)"
+$(X11_STAMPS)/libxshmfence: $(X11_STAMPS)/xproto | $(X11_STAMPS)
+	@$(DOCKER_EXEC) "set -euo pipefail; unset PKG_CONFIG_PATH PKG_CONFIG_SYSROOT_DIR SYSROOT; export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin; $(ENV_EXPORT) \
+		$(X11_CROSS_ENV) \
+		cd $(WORKDIR)/build/x11/build; \
+		rm -rf libxshmfence-1.3.2 && tar xf $(WORKDIR)/build/x11/src/libxshmfence-1.3.2.tar.gz; \
+		cd libxshmfence-1.3.2; \
+		./configure --host=$(CROSS_TRIPLE) --prefix=\$$PREFIX --libdir=\$$PREFIX/lib --enable-shared --disable-static; \
+		make -j$$(nproc) install"
 	@touch $@
 
-$(X11_STAMPS)/libX11: $(X11_STAMPS)/mesa $(X11_STAMPS)/xtrans $(X11_STAMPS)/libxcb | $(X11_STAMPS)
+$(X11_STAMPS)/mesa: $(X11_STAMPS)/libxcb $(X11_STAMPS)/libXrandr $(X11_STAMPS)/libxshmfence $(X11_STAMPS)/libXxf86vm | $(X11_STAMPS)
+	@$(DOCKER_EXEC) "set -euo pipefail; unset PKG_CONFIG_PATH PKG_CONFIG_SYSROOT_DIR SYSROOT; export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin; $(ENV_EXPORT) \
+		$(X11_CROSS_ENV) \
+		cd $(WORKDIR)/build/x11/build; \
+		rm -rf mesa-23.3.5 && tar xf $(WORKDIR)/build/x11/src/mesa-23.3.5.tar.xz; \
+		cd mesa-23.3.5; \
+		meson setup build --prefix=\$$PREFIX --libdir=lib --cross-file=$(CROSSFILE) \
+			-Dplatforms=x11 \
+			-Dglx=xlib \
+			-Dopengl=true -Dgles1=false -Dgles2=false \
+			-Degl=disabled -Dgbm=disabled \
+			-Dgallium-drivers=swrast -Dvulkan-drivers=[] \
+			-Dllvm=false -Dshared-glapi=true -Dglvnd=false \
+			-Dosmesa=false -Dvalgrind=disabled -Dlibunwind=disabled -Dbuild-tests=false; \
+		ninja -C build install"
+	@touch $@
+
+$(X11_STAMPS)/mesa-wayland-egl: $(X11_STAMPS)/libxcb $(X11_STAMPS)/libXrandr $(X11_STAMPS)/libxshmfence $(X11_STAMPS)/libXxf86vm | $(X11_STAMPS)
+	@$(DOCKER_EXEC) "set -euo pipefail; unset PKG_CONFIG_PATH PKG_CONFIG_SYSROOT_DIR SYSROOT; export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin; $(ENV_EXPORT) \
+		$(X11_CROSS_ENV) \
+		cd $(WORKDIR)/build/x11/build; \
+		rm -rf mesa-23.3.5-wayland && tar xf $(WORKDIR)/build/x11/src/mesa-23.3.5.tar.xz; \
+		rm -rf mesa-23.3.5-wayland && mv mesa-23.3.5 mesa-23.3.5-wayland; \
+		cd mesa-23.3.5-wayland; \
+		meson setup build --prefix=\$$PREFIX --libdir=lib --cross-file=$(CROSSFILE) \
+			-Dplatforms=wayland \
+			-Degl=enabled -Dgbm=enabled -Dglx=disabled \
+			-Dopengl=true -Dgles1=false -Dgles2=true \
+			-Dgallium-drivers=swrast -Dvulkan-drivers=[] \
+			-Dllvm=false -Dshared-glapi=true -Dglvnd=false \
+			-Dosmesa=false -Dvalgrind=disabled -Dlibunwind=disabled -Dbuild-tests=false; \
+		ninja -C build install"
+	@touch $@
+
+$(X11_STAMPS)/libX11: $(X11_STAMPS)/xtrans $(X11_STAMPS)/libxcb | $(X11_STAMPS)
 	@$(DOCKER_EXEC) "set -euo pipefail; unset PKG_CONFIG_PATH PKG_CONFIG_SYSROOT_DIR SYSROOT; export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin; $(ENV_EXPORT) \
 		$(X11_CROSS_ENV) \
 		export CFLAGS=\"-Wno-error=array-bounds \$$CFLAGS\"; export CXXFLAGS=\"\$$CFLAGS\"; \
@@ -211,7 +279,7 @@ $(X11_STAMPS)/libX11: $(X11_STAMPS)/mesa $(X11_STAMPS)/xtrans $(X11_STAMPS)/libx
 		cd libX11-1.8.7; \
 		cp -r \$$PREFIX/include/X11/* include/X11/ 2>/dev/null || true; \
 		./configure --host=$(CROSS_TRIPLE) --prefix=$(WORKDIR)/build/x11/prefix --libdir=$(WORKDIR)/build/x11/prefix/lib \
-			--disable-specs --disable-docs --disable-xlocale --disable-shared --enable-static --with-pic; \
+			--disable-specs --disable-docs --disable-shared --enable-static --with-pic; \
 		make -j$$(nproc) install"
 	@touch $@
 
@@ -261,12 +329,34 @@ $(X11_STAMPS)/libXfixes: $(X11_STAMPS)/libXrender | $(X11_STAMPS)
 		make -j$$(nproc) install"
 	@touch $@
 
-$(X11_STAMPS)/libXcursor: $(X11_STAMPS)/libXfixes | $(X11_STAMPS)
+$(X11_STAMPS)/libXrandr: $(X11_STAMPS)/libXrender $(X11_STAMPS)/libXfixes | $(X11_STAMPS)
+	@$(DOCKER_EXEC) "set -euo pipefail; unset PKG_CONFIG_PATH PKG_CONFIG_SYSROOT_DIR; export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin; $(ENV_EXPORT) \
+		$(X11_CROSS_ENV) \
+		cd $(WORKDIR)/build/x11/build; \
+		rm -rf libXrandr-1.5.4 && tar xf $(WORKDIR)/build/x11/src/libXrandr-1.5.4.tar.gz; \
+		cd libXrandr-1.5.4; \
+		cp -r \$$PREFIX/include/X11/* include/X11/ 2>/dev/null || true; \
+		./configure --host=$(CROSS_TRIPLE) --prefix=\$$PREFIX --libdir=\$$PREFIX/lib; \
+		make -j$$(nproc) install"
+	@touch $@
+
+$(X11_STAMPS)/libXcursor: $(X11_STAMPS)/libXrandr | $(X11_STAMPS)
 	@$(DOCKER_EXEC) "set -euo pipefail; unset PKG_CONFIG_PATH PKG_CONFIG_SYSROOT_DIR; export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin; $(ENV_EXPORT) \
 		$(X11_CROSS_ENV) \
 		cd $(WORKDIR)/build/x11/build; \
 		rm -rf libXcursor-1.2.2 && tar xf $(WORKDIR)/build/x11/src/libXcursor-1.2.2.tar.gz; \
 		cd libXcursor-1.2.2; \
+		cp -r \$$PREFIX/include/X11/* include/X11/ 2>/dev/null || true; \
+		./configure --host=$(CROSS_TRIPLE) --prefix=\$$PREFIX --libdir=\$$PREFIX/lib; \
+		make -j$$(nproc) install"
+	@touch $@
+
+$(X11_STAMPS)/libXxf86vm: $(X11_STAMPS)/libXfixes | $(X11_STAMPS)
+	@$(DOCKER_EXEC) "set -euo pipefail; unset PKG_CONFIG_PATH PKG_CONFIG_SYSROOT_DIR; export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin; $(ENV_EXPORT) \
+		$(X11_CROSS_ENV) \
+		cd $(WORKDIR)/build/x11/build; \
+		rm -rf libXxf86vm-1.1.4 && tar xf $(WORKDIR)/build/x11/src/libXxf86vm-1.1.4.tar.gz; \
+		cd libXxf86vm-1.1.4; \
 		cp -r \$$PREFIX/include/X11/* include/X11/ 2>/dev/null || true; \
 		./configure --host=$(CROSS_TRIPLE) --prefix=\$$PREFIX --libdir=\$$PREFIX/lib; \
 		make -j$$(nproc) install"
@@ -309,7 +399,7 @@ $(X11_STAMPS)/libxkbfile: $(X11_STAMPS)/libX11 $(X11_STAMPS)/xorg-macros | $(X11
 		rm -rf libxkbfile-1.1.3 && tar xf $(WORKDIR)/build/x11/src/libxkbfile-1.1.3.tar.gz; \
 		cd libxkbfile-1.1.3; \
 		ls -l \$$PREFIX/lib/libX11.la || (echo \"libX11.la missing\"; exit 1); \
-		./configure --host=$(CROSS_TRIPLE) --prefix=\$$PREFIX --libdir=\$$PREFIX/lib --disable-static --enable-shared; \
+		./configure --host=$(CROSS_TRIPLE) --prefix=\$$PREFIX --libdir=\$$PREFIX/lib --disable-shared --enable-static --with-pic; \
 		make -j$$(nproc) install"
 	@touch $@
 
@@ -320,40 +410,79 @@ $(X11_STAMPS)/libepoxy: $(X11_STAMPS)/libX11 | $(X11_STAMPS)
 		rm -rf libepoxy-1.5.10 && tar xf $(WORKDIR)/build/x11/src/libepoxy-1.5.10.tar.gz; \
 		cd libepoxy-1.5.10; \
 		meson setup build --prefix=\$$PREFIX --libdir=lib --cross-file=$(CROSSFILE) \
-			-Ddefault_library=shared -Dtests=false -Ddocs=false -Degl=no -Dglx=no -Dx11=false; \
+			-Ddefault_library=shared -Dtests=false -Ddocs=false \
+			-Degl=no -Dglx=yes -Dx11=true; \
 		ninja -C build install; \
 		ln -sf libepoxy.so.0.0.0 \$$PREFIX/lib/libepoxy.so.0; \
 		ln -sf libepoxy.so.0.0.0 \$$PREFIX/lib/libepoxy.so"
 	@touch $@
 
-$(X11_STAMPS)/x11-libs: $(X11_STAMPS)/libX11 $(X11_STAMPS)/libffi $(X11_STAMPS)/libxkbfile $(X11_STAMPS)/libXfont2 $(X11_STAMPS)/libXcursor $(X11_STAMPS)/libepoxy
+$(X11_STAMPS)/x11-libs: $(X11_STAMPS)/mesa $(X11_STAMPS)/libX11 $(X11_STAMPS)/libXdmcp $(X11_STAMPS)/libffi $(X11_STAMPS)/libxkbfile $(X11_STAMPS)/libXfont2 $(X11_STAMPS)/libXrandr $(X11_STAMPS)/libXcursor $(X11_STAMPS)/libepoxy $(X11_STAMPS)/libxshmfence $(X11_STAMPS)/libXxf86vm
 	@touch $@
 
-$(X11_STAMPS)/x11-server: $(X11_STAMPS)/x11-libs | $(X11_STAMPS)
+$(X11_STAMPS)/glxinfo: $(X11_STAMPS)/x11-libs | $(X11_STAMPS)
+	@$(DOCKER_EXEC) "set -euo pipefail; unset PKG_CONFIG_PATH PKG_CONFIG_SYSROOT_DIR SYSROOT; export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin; $(ENV_EXPORT) \
+		$(X11_CROSS_ENV) \
+		SRC_DIR=$(WORKDIR)/build/x11/build/glxinfo-src; \
+		rm -rf \$$SRC_DIR && mkdir -p \$$SRC_DIR; \
+		cd \$$SRC_DIR; \
+		wget -q https://gitlab.freedesktop.org/mesa/demos/-/raw/master/src/xdemos/glxinfo.c -O glxinfo.c; \
+		wget -q https://gitlab.freedesktop.org/mesa/demos/-/raw/master/src/xdemos/glinfo_common.c -O glinfo_common.c; \
+		wget -q https://gitlab.freedesktop.org/mesa/demos/-/raw/master/src/xdemos/glinfo_common.h -O glinfo_common.h; \
+		$$CC glxinfo.c glinfo_common.c -I\$$PREFIX/include \
+			-L\$$PREFIX/lib -L$(WESTON_PREFIX)/lib \
+			-Wl,-rpath,$(RUNTIME_PREFIX)/lib \
+			-Wl,-rpath-link,\$$PREFIX/lib -Wl,-rpath-link,$(WESTON_PREFIX)/lib \
+			-lGL -lX11 -lXext -lm -o glxinfo; \
+		install -Dm755 glxinfo \$$PREFIX/bin/glxinfo"
+	@touch $@
+
+$(X11_STAMPS)/xkbcomp: $(X11_STAMPS)/x11-libs | $(X11_STAMPS)
+	@$(DOCKER_EXEC) "set -euo pipefail; unset PKG_CONFIG_PATH PKG_CONFIG_SYSROOT_DIR; export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin; $(ENV_EXPORT) \
+		$(X11_CROSS_ENV) \
+		cd $(WORKDIR)/build/x11/build; \
+		rm -rf xkbcomp-1.4.6 && tar xf $(WORKDIR)/build/x11/src/xkbcomp-1.4.6.tar.gz; \
+		cd xkbcomp-1.4.6; \
+		LDFLAGS=\"-L\$$PREFIX/lib -Wl,-rpath,\$$PREFIX/lib\" LIBS=\"-lxkbfile -lX11 -lxcb -lXau -lXdmcp -lxcb-xkb\" \
+			./configure --host=$(CROSS_TRIPLE) --prefix=\$$PREFIX --libdir=\$$PREFIX/lib; \
+		LDFLAGS=\"-L\$$PREFIX/lib -Wl,-rpath,\$$PREFIX/lib\" LIBS=\"-lxkbfile -lX11 -lxcb -lXau -lXdmcp -lxcb-xkb\" \
+			make -j$$(nproc) install"
+	@touch $@
+
+$(X11_STAMPS)/x11-server: $(X11_STAMPS)/x11-libs $(X11_STAMPS)/xkbcomp | $(X11_STAMPS)
 	@$(DOCKER_EXEC) "set -euo pipefail; unset PKG_CONFIG_PATH PKG_CONFIG_SYSROOT_DIR; export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin; $(ENV_EXPORT) \
 		$(X11_CROSS_ENV) \
 		cd $(WORKDIR)/build/x11/build; \
 		rm -rf xorg-server-1.20.14 && tar xf $(WORKDIR)/build/x11/src/xorg-server-1.20.14.tar.gz; \
 		cd xorg-server-1.20.14; \
+		sed -i 's/Bool bool;/Bool bool_value;/' hw/xfree86/common/xf86Opt.h; \
 		cp -r \$$PREFIX/include/X11/* include/X11/ 2>/dev/null || true; \
 		./configure --host=$(CROSS_TRIPLE) --prefix=\$$PREFIX --libdir=\$$PREFIX/lib \
 			--disable-docs --disable-unit-tests \
-			--disable-glx --disable-dri --disable-dri2 --disable-dri3 --disable-glamor \
+			--enable-glx --enable-dri --enable-dri2 --disable-dri3 --disable-glamor \
 			--disable-xdmcp --enable-xwayland --disable-xnest --disable-kdrive \
 			--disable-xorg --disable-xvfb --enable-composite --disable-xinerama \
 			--disable-config-udev --disable-config-udev-kms --disable-config-hal --disable-systemd-logind \
-			--with-sha1=libcrypto --with-xkb-output=/tmp \
+			--with-sha1=libcrypto \
+			--with-dri-driver-path=$(RUNTIME_PREFIX)/lib/dri \
+			--with-xkb-path=$(RUNTIME_PREFIX)/share/X11/xkb \
+			--with-xkb-output=$(RUNTIME_PREFIX)/var/xkb \
+			--with-xkb-bin-directory=$(RUNTIME_PREFIX)/bin \
 			--with-default-font-path=/usr/share/fonts/X11 \
 			--with-builder-addr='BuildForTG5040' --enable-install-setuid=no \
 			CFLAGS=\"-Wno-error=array-bounds -Wno-array-bounds -DHAVE_DIX_CONFIG_H \$$CFLAGS\" \
-			LDFLAGS=\"-Wl,--allow-multiple-definition \$$LDFLAGS\" \
+			LDFLAGS=\"-Wl,--allow-multiple-definition -L\$$PREFIX/lib \$$LDFLAGS\" \
 			CPPFLAGS=\"-I\$$PREFIX/include -I\$$PREFIX/include/pixman-1\"; \
 		sed -i 's|^Xorg_LDADD = |Xorg_LDADD = loader/libloader.la |' hw/xfree86/Makefile; \
 		sed -i 's|^Xorg_DEPENDENCIES = |Xorg_DEPENDENCIES = loader/libloader.la |' hw/xfree86/Makefile; \
-		sed -i 's|[^ ]*glx/libglxvnd.la||g' hw/xwayland/Makefile; \
 		sed -i 's|\$$(top_builddir) \$$(XWAYLAND_SYS_LIBS)|\$$(XWAYLAND_SYS_LIBS)|' hw/xwayland/Makefile; \
-		sed -i 's|^XWAYLAND_SYS_LIBS = |XWAYLAND_SYS_LIBS = -lffi |' hw/xwayland/Makefile; \
-		make -j$$(nproc) install"
+		sed -i 's|^XWAYLAND_SYS_LIBS = .*|XWAYLAND_SYS_LIBS = -lffi -L$(WORKDIR)/build/x11/prefix/lib -L$(WESTON_PREFIX)/lib -Wl,-rpath,$(RUNTIME_PREFIX)/lib -lglapi -lGL -lepoxy -lwayland-client -ldrm -lxcb-glx -lxcb-dri2 -lxcb-dri3 -lxcb-present -lxcb-sync -lxcb-shm -lxcb-randr -lxcb-xfixes -lxcb -lXxf86vm -lXext -lXfixes -lxshmfence -lexpat -lm -lpthread -ldl|' hw/xwayland/Makefile; \
+		make -j$$(nproc) install; \
+		if command -v patchelf >/dev/null 2>&1; then \
+			patchelf --set-rpath $(RUNTIME_PREFIX)/lib $(X11_XWAYLAND); \
+		else \
+			echo 'warning: patchelf not found; Xwayland RPATH left at build paths'; \
+		fi"
 	@if [ -f $(X11_SERVER) ]; then \
 		echo "✓ X11 Xorg built: $(X11_SERVER)"; \
 	elif [ -f $(X11_XWAYLAND) ]; then \
@@ -375,7 +504,7 @@ verify-x11: x11
 clean-x11:
 	@rm -f $(X11_STAMPS)/*
 	@rm -rf $(X11_BUILD_DIR)/*org* $(X11_PREFIX)/bin/X
-	@rm -rf $(X11_PREFIX)/bin/Xvfb* $(X11_PREFIX)/lib/libGL* $(X11_PREFIX)/lib/libX11* $(X11_PREFIX)/lib/libXext* $(X11_PREFIX)/lib/libXrender* $(X11_PREFIX)/lib/libXfixes* $(X11_PREFIX)/lib/libXcursor* $(X11_PREFIX)/lib/libepoxy* $(X11_PREFIX)/lib/libxcb*
+	@rm -rf $(X11_PREFIX)/bin/Xvfb* $(X11_PREFIX)/lib/libGL* $(X11_PREFIX)/lib/libglapi* $(X11_PREFIX)/lib/dri $(X11_PREFIX)/lib/libX11* $(X11_PREFIX)/lib/libXext* $(X11_PREFIX)/lib/libXrender* $(X11_PREFIX)/lib/libXfixes* $(X11_PREFIX)/lib/libXrandr* $(X11_PREFIX)/lib/libXcursor* $(X11_PREFIX)/lib/libepoxy* $(X11_PREFIX)/lib/libxcb* $(X11_PREFIX)/lib/libxshmfence* $(X11_PREFIX)/lib/libXxf86vm*
 	@echo "Cleaned X11 build (sources preserved in $(X11_SRC_DIR))"
 
-clean: clean-x11
+clean: clean-

@@ -1,0 +1,12 @@
+diff --git a/hw/xfree86/common/xf86Opt.h b/hw/xfree86/common/xf86Opt.h
+index 90bce40..5f0b5c5 100644
+--- a/hw/xfree86/common/xf86Opt.h
++++ b/hw/xfree86/common/xf86Opt.h
+@@ -40,7 +40,7 @@ typedef union {
+     unsigned long num;
+     const char *str;
+     double realnum;
+-    Bool bool;
++    Bool bool_value;
+     OptFrequency freq;
+ } ValueUnion;

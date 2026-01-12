@@ -43,8 +43,8 @@ TARBALLS = \
 
 # Artifacts
 WESTON_LAUNCH   := $(PREFIX)/bin/weston-launch
-ZIP_BINARY      := ./zip
-LDD_BINARY      := ./ldd
+ZIP_BINARY      := zip
+LDD_BINARY      := ldd
 
 .PHONY: all deps weston weston-launch zip ldd x11 x11-deps x11-download x11-xwayland lwjgl glfw lwjgl-download verify-lwjgl verify-artifacts verify-x11 bundle deploy container clean clean-weston clean-zip clean-ldd clean-x11 clean-lwjgl help
 
@@ -171,28 +171,24 @@ $(WESTON_LAUNCH): $(STAMPS)/weston
 	@test -f $@ || (echo "✗ weston-launch not found after weston build"; exit 1)
 
 # Build InfoZip 3.0 aarch64 binary
-zip: $(ZIP_BINARY)
+zip: container
+	@echo "Building InfoZip 3.0 aarch64..."
+	@bash $(ROOT)/build-infozip.sh
+	@if [ ! -f $(ZIP_BINARY) ]; then echo "✗ zip binary not found at $(ZIP_BINARY)"; exit 1; fi
 	@echo "✓ InfoZip binary ready at $(ZIP_BINARY)"
 	@file $(ZIP_BINARY) | grep -q "aarch64" && echo "✓ Binary is ARM aarch64" || (echo "✗ Binary is not aarch64"; exit 1)
 	@if command -v readelf >/dev/null 2>&1; then \
 		readelf -V $(ZIP_BINARY) 2>/dev/null | grep -q "GLIBC_2.17" && echo "✓ Linked with GLIBC >= 2.17" || echo "⚠ GLIBC version not verified"; \
 	fi
 
-$(ZIP_BINARY): container
-	@echo "Building InfoZip 3.0 aarch64..."
-	@bash $(ROOT)/build-infozip.sh
-	@if [ ! -f $(ZIP_BINARY) ]; then echo "✗ zip binary not found at $(ZIP_BINARY)"; exit 1; fi
-
-ldd: $(LDD_BINARY)
-	@echo "✓ ldd ready at $(LDD_BINARY)"
-	@file $(LDD_BINARY) | grep -q "aarch64" && echo "✓ Binary is ARM aarch64" || (echo "✗ Binary is not aarch64"; exit 1)
-
-$(LDD_BINARY): container $(ROOT)/src/ldd-mini/ldd.c
+ldd: container
 	@echo "Building ldd utility..."
 	@$(DOCKER_EXEC) "set -euo pipefail; \
 		$(CROSS_BINDIR)/$(CROSS_TRIPLE)-gcc --sysroot=$(SYSROOT) -O2 -s \
 			-o $(WORKDIR)/ldd $(WORKDIR)/src/ldd-mini/ldd.c"
 	@if [ ! -f $(LDD_BINARY) ]; then echo "✗ ldd binary not found at $(LDD_BINARY)"; exit 1; fi
+	@echo "✓ ldd ready at $(LDD_BINARY)"
+	@file $(LDD_BINARY) | grep -q "aarch64" && echo "✓ Binary is ARM aarch64" || (echo "✗ Binary is not aarch64"; exit 1)
 
 # Verify both artifacts are built and valid
 verify-artifacts: weston-launch zip
@@ -356,12 +352,13 @@ $(STAMPS)/weston: $(STAMPS)/cairo | $(STAMPS)
 		cd $(WORKDIR)/build/weston/build; \
 		rm -rf weston-10.0.4 && tar xf $(WORKDIR)/build/weston/src/weston-10.0.4.tar.xz; \
 		cd weston-10.0.4; \
+		patch -p1 < $(WORKDIR)/build/weston/patches/allow-no-launcher-fallback.patch; \
 		sed -i \"s/^subdir('tests')/# subdir('tests')/\" meson.build; \
 		meson setup _build --prefix=\$$PREFIX --libdir=lib --buildtype=release --cross-file=$(CROSSFILE) --native-file=$(NATIVEFILE) \
 			-Drenderer-gl=false -Dbackend-drm=true -Dbackend-headless=true -Ddeprecated-backend-fbdev=true -Dbackend-default=drm \
 			-Dbackend-rdp=false -Dbackend-wayland=false -Dbackend-x11=false \
 			-Dbackend-drm-screencast-vaapi=false -Dscreenshare=false -Dpipewire=false -Dremoting=false -Dxwayland=false -Dsystemd=false \
-			-Dlauncher-logind=false -Ddeprecated-weston-launch=true -Ddeprecated-wl-shell=false \
+			-Dlauncher-logind=false -Dlauncher-libseat=false -Ddeprecated-weston-launch=true -Ddeprecated-wl-shell=false \
 			-Dshell-desktop=false -Dshell-ivi=false -Dshell-kiosk=false -Dcolor-management-lcms=false -Dcolor-management-colord=false -Dimage-jpeg=false -Dimage-webp=false \
 			-Ddemo-clients=false -Dsimple-clients=shm -Dtools=info -Dwcap-decode=false -Dlauncher-libseat=true \
 			-Dxwayland=true -Dxwayland-path=/mnt/SDCARD/Tools/tg5040/Weston.pak/bin/Xwayland; \

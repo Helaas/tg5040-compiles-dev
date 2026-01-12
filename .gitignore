@@ -29,6 +29,7 @@
 /build/weston/src/*
 !/build/weston/src/*.tar.gz
 !/build/weston/src/*.tar.xz
+!/build/weston/patches
 
 # Allow the x11 build tree overall but keep tracked sources/tools
 !/build/x11

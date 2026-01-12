@@ -43,6 +43,7 @@ GLFW_TARBALL    := glfw-$(GLFW_VERSION).tar.gz
 GLFW_SHA256     := c038d34200234d071fae9345bc455e4a8f2f544ab60150765d7704e08f3dac01
 GLFW_ARCHIVE    := $(LWJGL_SRC_DIR)/$(GLFW_TARBALL)
 GLFW_BUILD_DIR  := $(LWJGL_BUILD_DIR)/glfw-$(GLFW_VERSION)
+GLFW_INSTALL    := $(WORKDIR)/build/x11/prefix
 GLFW_STAMP      := $(LWJGL_STAMPS)/glfw
 
 # GLIBC guardrail: device max is GLIBC_2.33.
@@ -81,7 +82,7 @@ glfw: container $(GLFW_STAMP)
 
 verify: container $(LWJGL_STAMP)
 	@$(DOCKER_EXEC) "set -euo pipefail; \
-		for lib in $(WORKDIR)/build/lwjgl/prefix/lib/liblwjgl*.so $(WORKDIR)/build/lwjgl/prefix/lib/libglfw.so.3*; do \
+		for lib in $(WORKDIR)/build/lwjgl/prefix/lib/liblwjgl*.so $(WORKDIR)/build/x11/prefix/lib/libglfw.so.3*; do \
 			[ -f \"\$$lib\" ] || continue; \
 			max=\$$(/opt/aarch64-nextui-linux-gnu/bin/$(CROSS_TRIPLE)-readelf -V \"\$$lib\" | sed -n 's/.*Name: GLIBC_\\([0-9.]*\\).*/\\1/p' | sort -V | tail -1); \
 			if [ -n \"\$$max\" ]; then \
@@ -130,7 +131,7 @@ $(GLFW_STAMP): container $(GLFW_ARCHIVE) | $(LWJGL_BUILD_DIR) $(LWJGL_PREFIX) $(
 			-DCMAKE_FIND_ROOT_PATH_MODE_INCLUDE=ONLY \
 			-DCMAKE_FIND_ROOT_PATH_MODE_PACKAGE=ONLY \
 			-DCMAKE_PREFIX_PATH=$(WORKDIR)/build/weston/prefix \
-			-DCMAKE_INSTALL_PREFIX=$(WORKDIR)/build/lwjgl/prefix \
+			-DCMAKE_INSTALL_PREFIX=$(GLFW_INSTALL) \
 			-DBUILD_SHARED_LIBS=ON \
 			-DGLFW_BUILD_WAYLAND=ON \
 			-DGLFW_BUILD_X11=OFF \
@@ -139,9 +140,6 @@ $(GLFW_STAMP): container $(GLFW_ARCHIVE) | $(LWJGL_BUILD_DIR) $(LWJGL_PREFIX) $(
 			-DGLFW_BUILD_EXAMPLES=OFF \
 			-DGLFW_BUILD_TESTS=OFF; \
 		ninja install"
-	@rm -f "$(LWJGL_PREFIX)/lib/libglfw.so" "$(LWJGL_PREFIX)/lib/libglfw.so.3"
-	@ln -s "libglfw.so.3.4" "$(LWJGL_PREFIX)/lib/libglfw.so.3"
-	@ln -s "libglfw.so.3.4" "$(LWJGL_PREFIX)/lib/libglfw.so"
 	@touch "$(GLFW_STAMP)"
 
 $(LWJGL_STAMP): container $(LWJGL_ARCHIVE) | $(LWJGL_BUILD_DIR) $(LWJGL_PREFIX) $(LWJGL_STAMPS)
