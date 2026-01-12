@@ -355,11 +355,13 @@ $(STAMPS)/weston: $(STAMPS)/cairo | $(STAMPS)
 		patch -p1 < $(WORKDIR)/build/weston/patches/allow-no-launcher-fallback.patch; \
 		sed -i \"s/^subdir('tests')/# subdir('tests')/\" meson.build; \
 		meson setup _build --prefix=\$$PREFIX --libdir=lib --buildtype=release --cross-file=$(CROSSFILE) --native-file=$(NATIVEFILE) \
+			-Dc_link_args=\"-Wl,--no-as-needed -L$(WORKDIR)/build/x11/prefix/lib -Wl,-rpath,$(WORKDIR)/build/x11/prefix/lib -Wl,-rpath-link,$(WORKDIR)/build/x11/prefix/lib -ldl -lpthread -Wl,--as-needed\" \
+			-Dcpp_link_args=\"-Wl,--no-as-needed -L$(WORKDIR)/build/x11/prefix/lib -Wl,-rpath,$(WORKDIR)/build/x11/prefix/lib -Wl,-rpath-link,$(WORKDIR)/build/x11/prefix/lib -ldl -lpthread -Wl,--as-needed\" \
 			-Drenderer-gl=false -Dbackend-drm=true -Dbackend-headless=true -Ddeprecated-backend-fbdev=true -Dbackend-default=drm \
 			-Dbackend-rdp=false -Dbackend-wayland=false -Dbackend-x11=false \
 			-Dbackend-drm-screencast-vaapi=false -Dscreenshare=false -Dpipewire=false -Dremoting=false -Dxwayland=false -Dsystemd=false \
 			-Dlauncher-logind=false -Dlauncher-libseat=false -Ddeprecated-weston-launch=true -Ddeprecated-wl-shell=false \
-			-Dshell-desktop=false -Dshell-ivi=false -Dshell-kiosk=false -Dcolor-management-lcms=false -Dcolor-management-colord=false -Dimage-jpeg=false -Dimage-webp=false \
+			-Dshell-desktop=true -Dshell-ivi=false -Dshell-kiosk=false -Dcolor-management-lcms=false -Dcolor-management-colord=false -Dimage-jpeg=false -Dimage-webp=false \
 			-Ddemo-clients=false -Dsimple-clients=shm -Dtools=info -Dwcap-decode=false -Dlauncher-libseat=true \
 			-Dxwayland=true -Dxwayland-path=/mnt/SDCARD/Tools/tg5040/Weston.pak/bin/Xwayland; \
 		ninja -C _build install"
