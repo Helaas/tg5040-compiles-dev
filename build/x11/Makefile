@@ -66,6 +66,7 @@ X11_TARBALLS = \
 	$(X11_SRC_DIR)/libepoxy-1.5.10.tar.gz \
 	$(X11_SRC_DIR)/libffi-3.3.tar.gz \
 	$(X11_SRC_DIR)/xkbcomp-1.4.6.tar.gz \
+	$(X11_SRC_DIR)/xwininfo-1.1.6.tar.gz \
 	$(X11_SRC_DIR)/xorg-server-1.20.14.tar.gz
 
 # Artifacts
@@ -73,7 +74,7 @@ X11_SERVER      := $(X11_PREFIX)/bin/Xorg
 X11_XWAYLAND    := $(X11_PREFIX)/bin/Xwayland
 X11_LIBS        := $(X11_PREFIX)/lib/libX11.so $(X11_PREFIX)/lib/libGL.so
 
-.PHONY: all deps x11 x11-deps x11-xwayland glxinfo mesa-wayland-egl verify-x11 clean clean-x11 download help
+.PHONY: all deps x11 x11-deps x11-xwayland glxinfo xwininfo mesa-wayland-egl verify-x11 clean clean-x11 download help
 
 help:
 	@echo "X11 Build Targets:"
@@ -84,6 +85,7 @@ help:
 	@echo "  make verify-x11       - Verify X11 build artifacts"
 	@echo "  make clean-x11        - Remove X11 build (keep sources)"
 	@echo "  make clean            - Remove all X11 build (keep sources)"
+	@echo "  make xwininfo         - Build xwininfo utility (for debugging X windows)"
 
 all: x11
 
@@ -113,7 +115,7 @@ $(X11_SRC_DIR)/%.tar.gz: | $(X11_SRC_DIR)
 		libX11-*.tar.gz | libXext-*.tar.gz | libXrender-*.tar.gz | libXfixes-*.tar.gz | libXcursor-*.tar.gz | libXfont2-*.tar.gz | libxkbfile-*.tar.gz) curl -fsSL "https://www.x.org/archive/individual/lib/$(@F)" -o $@ ;; \
 		libxshmfence-*.tar.gz) curl -fsSL "https://www.x.org/archive/individual/lib/$(@F)" -o $@ ;; \
 		libXxf86vm-*.tar.gz) curl -fsSL "https://www.x.org/archive/individual/lib/$(@F)" -o $@ ;; \
-		xkbcomp-*.tar.gz) curl -fsSL "https://www.x.org/archive/individual/app/$(@F)" -o $@ ;; \
+		xkbcomp-*.tar.gz|xwininfo-*.tar.gz) curl -fsSL "https://www.x.org/archive/individual/app/$(@F)" -o $@ ;; \
 		libepoxy-*.tar.gz) curl -fsSL "https://github.com/anholt/libepoxy/archive/refs/tags/1.5.10.tar.gz" -o $@ ;; \
 		libffi-*.tar.gz) curl -fsSL "https://github.com/libffi/libffi/releases/download/v3.3/$(@F)" -o $@ ;; \
 		util-macros-*.tar.gz) curl -fsSL "https://www.x.org/archive/individual/util/$(@F)" -o $@ ;; \
@@ -133,7 +135,7 @@ $(X11_BUILD_DIR):
 # X11 build targets (PowerVR GPU optimized with OpenGL ES support)
 # Build order: xcb-proto -> xproto -> libXau -> libxcb -> mesa (OpenGL) -> libX11 -> libXext -> libXrender -> X11 server
 
-x11: $(X11_STAMPS)/x11-server $(X11_STAMPS)/glxinfo
+x11: $(X11_STAMPS)/x11-server $(X11_STAMPS)/glxinfo $(X11_STAMPS)/xwininfo
 	@echo "✓ X11 server built successfully at $(X11_SERVER)"
 
 x11-deps: $(X11_STAMPS)/x11-libs $(X11_STAMPS)/xkbcomp
@@ -144,6 +146,9 @@ mesa-wayland-egl: $(X11_STAMPS)/mesa-wayland-egl
 
 glxinfo: $(X11_STAMPS)/glxinfo
 	@echo "✓ glxinfo built: $(X11_PREFIX)/bin/glxinfo"
+
+xwininfo: $(X11_STAMPS)/xwininfo
+	@test -f $(X11_PREFIX)/bin/xwininfo && echo "✓ xwininfo built: $(X11_PREFIX)/bin/xwininfo" || (echo "✗ xwininfo build failed"; exit 1)
 
 x11-xwayland: $(X11_STAMPS)/x11-server
 	@test -f $(X11_XWAYLAND) && echo "✓ Xwayland built: $(X11_XWAYLAND)" || (echo "✗ Xwayland build failed"; exit 1)
@@ -446,6 +451,19 @@ $(X11_STAMPS)/xkbcomp: $(X11_STAMPS)/x11-libs | $(X11_STAMPS)
 		LDFLAGS=\"-L\$$PREFIX/lib -Wl,-rpath,\$$PREFIX/lib\" LIBS=\"-lxkbfile -lX11 -lxcb -lXau -lXdmcp -lxcb-xkb\" \
 			./configure --host=$(CROSS_TRIPLE) --prefix=\$$PREFIX --libdir=\$$PREFIX/lib; \
 		LDFLAGS=\"-L\$$PREFIX/lib -Wl,-rpath,\$$PREFIX/lib\" LIBS=\"-lxkbfile -lX11 -lxcb -lXau -lXdmcp -lxcb-xkb\" \
+			make -j$$(nproc) install"
+	@touch $@
+
+$(X11_STAMPS)/xwininfo: $(X11_STAMPS)/x11-libs | $(X11_STAMPS)
+	@$(DOCKER_EXEC) "set -euo pipefail; unset PKG_CONFIG_PATH PKG_CONFIG_SYSROOT_DIR; export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin; $(ENV_EXPORT) \
+		$(X11_CROSS_ENV) \
+		cd $(WORKDIR)/build/x11/build; \
+		rm -rf xwininfo-1.1.6 && tar xf $(WORKDIR)/build/x11/src/xwininfo-1.1.6.tar.gz; \
+		cd xwininfo-1.1.6; \
+		LDFLAGS=\"-L\$$PREFIX/lib -Wl,-rpath,$(RUNTIME_PREFIX)/lib -Wl,-rpath-link,\$$PREFIX/lib\" \
+			LIBS=\"-lX11 -lXext -lXrender -lXrandr -lXfixes -lxcb -lXau -lXdmcp\" \
+			./configure --host=$(CROSS_TRIPLE) --prefix=\$$PREFIX --libdir=\$$PREFIX/lib; \
+		LDFLAGS=\"-L\$$PREFIX/lib -Wl,-rpath,$(RUNTIME_PREFIX)/lib -Wl,-rpath-link,\$$PREFIX/lib\" \
 			make -j$$(nproc) install"
 	@touch $@
 
