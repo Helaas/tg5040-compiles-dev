@@ -1,0 +1,7 @@
+prefix=/workspace/build/x11/prefix-x11-pure
+includedir=${prefix}/include
+ 
+Name: DMXProto
+Description: DMX extension headers
+Version: 2.3.1
+Cflags: -I${includedir}

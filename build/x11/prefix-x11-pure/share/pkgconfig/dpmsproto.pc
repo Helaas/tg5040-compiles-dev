@@ -1,0 +1,7 @@
+prefix=/workspace/build/x11/prefix-x11-pure
+includedir=${prefix}/include
+
+Name: DPMSProto
+Description: DPMS extension headers
+Version: 1.2
+Cflags: -I${includedir}

@@ -62,10 +62,20 @@ SDL3_BUILD_DIR  := $(LWJGL_BUILD_DIR)/SDL-$(SDL3_VERSION)
 SDL3_INSTALL    := $(WORKDIR)/build/x11/prefix
 SDL3_STAMP      := $(LWJGL_STAMPS)/sdl3
 
+# GL4ES (GL over GLES for PowerVR)
+GL4ES_COMMIT    := 1d69dd6a9867f8c2a9592e035ba00090f74071d7
+GL4ES_SHA256    := cc90de2b20597599387bd351728d3ba4ed0a37f7f9d87eea7216c1006b5bac7f
+GL4ES_TARBALL   := gl4es-$(GL4ES_COMMIT).tar.gz
+GL4ES_ARCHIVE   := $(LWJGL_SRC_DIR)/$(GL4ES_TARBALL)
+GL4ES_SRC_DIR   := $(LWJGL_BUILD_DIR)/gl4es-$(GL4ES_COMMIT)
+GL4ES_BUILD_DIR := $(GL4ES_SRC_DIR)/build
+GL4ES_INSTALL   := $(LWJGL_PREFIX)
+GL4ES_STAMP     := $(LWJGL_STAMPS)/gl4es
+
 # GLIBC guardrail: device max is GLIBC_2.33.
 GLIBC_MAX ?= 2.33
 
-.PHONY: all lwjgl glfw openal sdl3 download verify clean clean-lwjgl container help
+.PHONY: all lwjgl glfw openal sdl3 gl4es download verify clean clean-lwjgl container help
 
 all: lwjgl
 
@@ -75,6 +85,7 @@ help:
 	@echo "  make glfw             - Build GLFW for Wayland/EGL (aarch64)"
 	@echo "  make openal           - Build OpenAL Soft (GLIBC<=2.33)"
 	@echo "  make sdl3             - Build SDL3 (GLIBC<=2.33, Wayland-only)"
+	@echo "  make gl4es            - Build GL4ES (GL over GLES) with PowerVR EGL fallback"
 	@echo "  make download         - Download LWJGL sources"
 	@echo "  make verify           - Verify GLIBC version of built libs"
 	@echo "  make clean-lwjgl      - Remove LWJGL build artifacts (keep sources)"
@@ -89,10 +100,10 @@ container:
 		docker start $(CONTAINER) >/dev/null; \
 	fi
 
-download: $(LWJGL_ARCHIVE) $(GLFW_ARCHIVE) $(OPENAL_ARCHIVE) $(SDL3_ARCHIVE)
-	@echo "✓ LWJGL/GLFW/OpenAL/SDL3 sources downloaded"
+download: $(LWJGL_ARCHIVE) $(GLFW_ARCHIVE) $(OPENAL_ARCHIVE) $(SDL3_ARCHIVE) $(GL4ES_ARCHIVE)
+	@echo "✓ LWJGL/GLFW/OpenAL/SDL3/GL4ES sources downloaded"
 
-lwjgl: container $(GLFW_STAMP) $(OPENAL_STAMP) $(SDL3_STAMP) $(LWJGL_STAMP)
+lwjgl: container $(GLFW_STAMP) $(OPENAL_STAMP) $(SDL3_STAMP) $(GL4ES_STAMP) $(LWJGL_STAMP)
 	@echo "✓ LWJGL natives built in $(LWJGL_OUT_LIB)"
 
 glfw: container $(GLFW_STAMP)
@@ -104,9 +115,12 @@ openal: container $(OPENAL_STAMP)
 sdl3: container $(SDL3_STAMP)
 	@echo "✓ SDL3 built in $(SDL3_INSTALL)/lib"
 
+gl4es: container $(GL4ES_STAMP)
+	@echo "✓ GL4ES built in $(GL4ES_INSTALL)/lib"
+
 verify: container $(LWJGL_STAMP)
 	@$(DOCKER_EXEC) "set -euo pipefail; \
-		for lib in $(WORKDIR)/build/lwjgl/prefix/lib/liblwjgl*.so $(WORKDIR)/build/x11/prefix/lib/libglfw.so.3* $(WORKDIR)/build/x11/prefix/lib/libopenal.so* $(WORKDIR)/build/x11/prefix/lib/libSDL3.so*; do \
+		for lib in $(WORKDIR)/build/lwjgl/prefix/lib/liblwjgl*.so $(WORKDIR)/build/x11/prefix/lib/libglfw.so.3* $(WORKDIR)/build/x11/prefix/lib/libopenal.so* $(WORKDIR)/build/x11/prefix/lib/libSDL3.so* $(WORKDIR)/build/lwjgl/prefix/lib/libGL.so*; do \
 			[ -f \"\$$lib\" ] || continue; \
 			max=\$$(/opt/aarch64-nextui-linux-gnu/bin/$(CROSS_TRIPLE)-readelf -V \"\$$lib\" | sed -n 's/.*Name: GLIBC_\\([0-9.]*\\).*/\\1/p' | sort -V | tail -1); \
 			if [ -n \"\$$max\" ]; then \
@@ -137,6 +151,12 @@ $(OPENAL_ARCHIVE): | $(LWJGL_SRC_DIR)
 $(SDL3_ARCHIVE): | $(LWJGL_SRC_DIR)
 	@echo "Downloading SDL3 sources..."
 	@curl -L -o "$(SDL3_ARCHIVE)" "https://github.com/libsdl-org/SDL/archive/refs/heads/main.tar.gz"
+
+$(GL4ES_ARCHIVE): | $(LWJGL_SRC_DIR)
+	@echo "Downloading GL4ES sources..."
+	@curl -L -o "$(GL4ES_ARCHIVE)" "https://github.com/ptitSeb/gl4es/archive/$(GL4ES_COMMIT).tar.gz"
+	@echo "Verifying GL4ES archive..."
+	@python3 -c 'import hashlib, pathlib, sys; p=pathlib.Path("$(GL4ES_ARCHIVE)"); exp="$(GL4ES_SHA256)"; dig=hashlib.sha256(p.read_bytes()).hexdigest(); sys.exit(f"SHA256 mismatch for {p}\\nExpected: {exp}\\nActual:   {dig}\\n") if dig!=exp else print(f"Verified {p.name}")'
 
 $(GLFW_STAMP): container $(GLFW_ARCHIVE) | $(LWJGL_BUILD_DIR) $(LWJGL_PREFIX) $(LWJGL_STAMPS)
 	@echo "Building GLFW $(GLFW_VERSION) for Wayland/EGL..."
@@ -257,6 +277,72 @@ $(SDL3_STAMP): container $(SDL3_ARCHIVE) | $(LWJGL_BUILD_DIR) $(LWJGL_STAMPS)
 		ninja -C $(WORKDIR)/build/lwjgl/build/SDL-$(SDL3_VERSION)/build install"
 	@touch "$(SDL3_STAMP)"
 
+$(GL4ES_STAMP): container $(GL4ES_ARCHIVE) | $(LWJGL_BUILD_DIR) $(LWJGL_PREFIX) $(LWJGL_STAMPS)
+	@echo "Building GL4ES (PowerVR EGL fallback)..."
+	@set -euo pipefail; \
+	rm -rf "$(GL4ES_SRC_DIR)"; \
+	tar -xzf "$(GL4ES_ARCHIVE)" -C "$(LWJGL_BUILD_DIR)"; \
+	if [ -f "$(WORKDIR)/build/lwjgl/patches/gl4es-powervr-egl.patch" ]; then \
+		cd "$(GL4ES_SRC_DIR)" && patch -p1 < "$(WORKDIR)/build/lwjgl/patches/gl4es-powervr-egl.patch"; \
+	fi; \
+	$(DOCKER_EXEC) "set -euo pipefail; \
+		apt-get update >/dev/null; \
+		DEBIAN_FRONTEND=noninteractive apt-get install -y cmake ninja-build pkg-config >/dev/null; \
+		export PATH=$(CROSS_BINDIR):\$$PATH; \
+		export PKG_CONFIG_PATH=$(WORKDIR)/build/x11/prefix/lib/pkgconfig:$(WORKDIR)/build/x11/prefix/share/pkgconfig:$(PKG_PATH); \
+		export PKG_CONFIG_LIBDIR=\$$PKG_CONFIG_PATH; \
+		export PKG_CONFIG_SYSROOT_DIR=; \
+		cd $(WORKDIR)/build/lwjgl/build/gl4es-$(GL4ES_COMMIT); \
+		mkdir -p build && cd build; \
+		cmake -G Ninja .. \
+			-DCMAKE_SYSTEM_NAME=Linux \
+			-DCMAKE_SYSTEM_PROCESSOR=aarch64 \
+			-DCMAKE_SYSROOT=$(SYSROOT) \
+			-DCMAKE_C_COMPILER=$(CROSS_BINDIR)/$(CROSS_TRIPLE)-gcc \
+			-DCMAKE_CXX_COMPILER=$(CROSS_BINDIR)/$(CROSS_TRIPLE)-g++ \
+			-DCMAKE_FIND_ROOT_PATH=$(SYSROOT) \
+			-DCMAKE_FIND_ROOT_PATH_MODE_LIBRARY=ONLY \
+			-DCMAKE_FIND_ROOT_PATH_MODE_INCLUDE=ONLY \
+			-DCMAKE_FIND_ROOT_PATH_MODE_PACKAGE=ONLY \
+			-DCMAKE_PREFIX_PATH=$(WORKDIR)/build/x11/prefix \
+			-DCMAKE_C_FLAGS=\"--sysroot=$(SYSROOT) -I$(WORKDIR)/build/x11/prefix/include\" \
+			-DCMAKE_SHARED_LINKER_FLAGS=\"--sysroot=$(SYSROOT) -L$(WORKDIR)/build/x11/prefix/lib\" \
+			-DCMAKE_EXE_LINKER_FLAGS=\"--sysroot=$(SYSROOT) -L$(WORKDIR)/build/x11/prefix/lib\" \
+			-DCMAKE_BUILD_TYPE=Release \
+			-DDEFAULT_ES=2 \
+			-DNO_GBM=ON; \
+		ninja"
+	@set -euo pipefail; \
+	mkdir -p "$(GL4ES_INSTALL)/lib"; \
+	rm -f "$(GL4ES_INSTALL)/lib/libGL.so"*; \
+	if ls "$(GL4ES_BUILD_DIR)/libGL.so"* >/dev/null 2>&1; then \
+		cp -f "$(GL4ES_BUILD_DIR)"/libGL.so* "$(GL4ES_INSTALL)/lib/"; \
+	elif ls "$(GL4ES_BUILD_DIR)/lib"/libGL.so* >/dev/null 2>&1; then \
+		cp -f "$(GL4ES_BUILD_DIR)/lib"/libGL.so* "$(GL4ES_INSTALL)/lib/"; \
+	elif ls "$(GL4ES_SRC_DIR)/lib"/libGL.so* >/dev/null 2>&1; then \
+		cp -f "$(GL4ES_SRC_DIR)/lib"/libGL.so* "$(GL4ES_INSTALL)/lib/"; \
+	fi; \
+	if [ -f "$(GL4ES_INSTALL)/lib/libGL.so.1" ]; then \
+		ln -sf "libGL.so.1" "$(GL4ES_INSTALL)/lib/libGL.so"; \
+	fi; \
+	if ! ls "$(GL4ES_INSTALL)/lib/libGL.so"* >/dev/null 2>&1; then \
+		echo "✗ GL4ES library not found after build"; \
+		exit 1; \
+	fi
+	@$(DOCKER_EXEC) "set -euo pipefail; \
+		for lib in $(WORKDIR)/build/lwjgl/prefix/lib/libGL.so*; do \
+			[ -f \"\$$lib\" ] || continue; \
+			max=\$$(/opt/aarch64-nextui-linux-gnu/bin/$(CROSS_TRIPLE)-readelf -V \"\$$lib\" | sed -n 's/.*Name: GLIBC_\\([0-9.]*\\).*/\\1/p' | sort -V | tail -1); \
+			if [ -n \"\$$max\" ]; then \
+				if [ \"\$$({ printf '%s\n%s\n' \"$(GLIBC_MAX)\" \"\$$max\" | sort -V | tail -1; })\" != \"$(GLIBC_MAX)\" ]; then \
+					echo \"✗ \$$lib requires GLIBC_\$$max (max allowed $(GLIBC_MAX))\"; \
+					exit 1; \
+				fi; \
+			fi; \
+		done; \
+		echo \"✓ GL4ES built (<= GLIBC_$(GLIBC_MAX))\""
+	@touch "$(GL4ES_STAMP)"
+
 $(LWJGL_STAMP): container $(LWJGL_ARCHIVE) | $(LWJGL_BUILD_DIR) $(LWJGL_PREFIX) $(LWJGL_STAMPS)
 	@echo "Building LWJGL natives (linux/arm64)..."
 	@set -euo pipefail; \
@@ -273,7 +359,7 @@ $(LWJGL_STAMP): container $(LWJGL_ARCHIVE) | $(LWJGL_BUILD_DIR) $(LWJGL_PREFIX) 
 	rm -f "$(LWJGL_OUT_LIB)/lib"*.so; \
 	find "$(LWJGL_SRC_PATH)/bin/libs/native/linux/arm64/org/lwjgl" -maxdepth 4 -type f -name "lib*.so" -exec cp {} "$(LWJGL_OUT_LIB)/" \;; \
 	$(DOCKER_EXEC) "set -euo pipefail; \
-		for lib in $(WORKDIR)/build/lwjgl/prefix/lib/liblwjgl*.so $(WORKDIR)/build/lwjgl/prefix/lib/libglfw.so.3*; do \
+		for lib in $(WORKDIR)/build/lwjgl/prefix/lib/liblwjgl*.so $(WORKDIR)/build/lwjgl/prefix/lib/libglfw.so.3* $(WORKDIR)/build/lwjgl/prefix/lib/libGL.so*; do \
 			[ -f \"\$$lib\" ] || continue; \
 			max=\$$(/opt/aarch64-nextui-linux-gnu/bin/$(CROSS_TRIPLE)-readelf -V \"\$$lib\" | sed -n 's/.*Name: GLIBC_\\([0-9.]*\\).*/\\1/p' | sort -V | tail -1); \
 			if [ -n \"\$$max\" ]; then \
@@ -290,7 +376,7 @@ $(LWJGL_SRC_DIR) $(LWJGL_BUILD_DIR) $(LWJGL_PREFIX) $(LWJGL_STAMPS):
 	@mkdir -p $@
 
 clean-lwjgl:
-	rm -rf $(LWJGL_BUILD_DIR) $(LWJGL_PREFIX) $(LWJGL_STAMPS)/lwjgl
+	rm -rf $(LWJGL_BUILD_DIR) $(LWJGL_PREFIX) $(LWJGL_STAMPS)/lwjgl $(LWJGL_STAMPS)/gl4es
 	@echo "Cleaned LWJGL build (keeping sources)."
 
 clean: clean-lwjgl

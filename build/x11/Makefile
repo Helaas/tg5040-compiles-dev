@@ -282,10 +282,11 @@ $(X11_STAMPS)/libX11: $(X11_STAMPS)/xtrans $(X11_STAMPS)/libxcb | $(X11_STAMPS)
 		cd $(WORKDIR)/build/x11/build; \
 		rm -rf libX11-1.8.7 && tar xf $(WORKDIR)/build/x11/src/libX11-1.8.7.tar.gz; \
 		cd libX11-1.8.7; \
-		cp -r \$$PREFIX/include/X11/* include/X11/ 2>/dev/null || true; \
-		./configure --host=$(CROSS_TRIPLE) --prefix=$(WORKDIR)/build/x11/prefix --libdir=$(WORKDIR)/build/x11/prefix/lib \
-			--disable-specs --disable-docs --disable-shared --enable-static --with-pic; \
-		make -j$$(nproc) install"
+			cp -r \$$PREFIX/include/X11/* include/X11/ 2>/dev/null || true; \
+			./configure --host=$(CROSS_TRIPLE) --prefix=$(WORKDIR)/build/x11/prefix --libdir=$(WORKDIR)/build/x11/prefix/lib \
+				--disable-specs --disable-docs --enable-shared --disable-static --with-pic \
+				--with-keysymdefdir=$(WORKDIR)/build/x11/prefix/include/X11; \
+			make -j$$(nproc) install"
 	@touch $@
 
 $(X11_STAMPS)/libffi: $(X11_STAMPS)/libX11 | $(X11_STAMPS)

@@ -1,0 +1,7 @@
+prefix=/workspace/build/x11/prefix-x11-pure
+includedir=${prefix}/include
+ 
+Name: DRI2Proto
+Description: DRI2 extension headers
+Version: 2.8
+Cflags: -I${includedir}

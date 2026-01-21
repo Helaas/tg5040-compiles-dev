@@ -1,0 +1,7 @@
+prefix=/workspace/build/x11/prefix-x11-pure
+includedir=${prefix}/include
+ 
+Name: GLProto
+Description: GL extension headers
+Version: 1.4.17
+Cflags: -I${includedir}

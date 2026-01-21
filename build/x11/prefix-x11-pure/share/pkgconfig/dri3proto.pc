@@ -1,0 +1,7 @@
+prefix=/workspace/build/x11/prefix-x11-pure
+includedir=${prefix}/include
+ 
+Name: DRI3Proto
+Description: DRI3 extension headers
+Version: 1.4
+Cflags: -I${includedir}

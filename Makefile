@@ -39,6 +39,7 @@ TARBALLS = \
 	$(SRC_DIR)/0.8.0.tar.gz \
 	$(SRC_DIR)/cairo-1.16.0.tar.xz \
 	$(SRC_DIR)/openssl-3.0.13.tar.gz \
+	$(SRC_DIR)/mesa-24.1.7.tar.xz \
 	$(SRC_DIR)/weston-10.0.4.tar.xz
 
 # Artifacts
@@ -46,7 +47,7 @@ WESTON_LAUNCH   := $(PREFIX)/bin/weston-launch
 ZIP_BINARY      := zip
 LDD_BINARY      := ldd
 
-.PHONY: all deps weston weston-launch zip ldd x11 x11-deps x11-download x11-xwayland lwjgl glfw lwjgl-download verify-lwjgl verify-artifacts verify-x11 bundle deploy container clean clean-weston clean-zip clean-ldd clean-x11 clean-lwjgl help
+.PHONY: all deps weston weston-launch zip ldd strace x11 x11-pure x11-deps x11-download x11-xwayland lwjgl glfw lwjgl-download verify-lwjgl verify-artifacts verify-x11 verify-strace bundle deploy container clean clean-weston clean-zip clean-ldd clean-x11 clean-lwjgl clean-strace help
 
 all: weston
 
@@ -56,7 +57,9 @@ help:
 	@echo "  make weston-launch    - Verify weston-launch binary exists and is correctly linked"
 	@echo "  make zip              - Build InfoZip 3.0 aarch64 binary"
 	@echo "  make ldd              - Build ldd utility (aarch64)"
+	@echo "  make strace           - Build strace for aarch64"
 	@echo "  make x11              - Build X11 server + dependencies (PowerVR/OpenGL ES optimized)"
+	@echo "  make x11-pure         - Build standalone X11 (fbdev+GLX) without weston deps"
 	@echo "  make x11-deps         - Build only X11 dependencies (libX11, libXext, libXrender, mesa)"
 	@echo "  make x11-download     - Download X11 source tarballs"
 	@echo "  make x11-xwayland     - Build Xwayland binary for Weston"
@@ -66,8 +69,10 @@ help:
 	@echo "  make verify-lwjgl     - Verify LWJGL GLIBC compatibility"
 	@echo "  make verify-artifacts - Verify both weston-launch and zip binaries"
 	@echo "  make verify-x11       - Verify X11 server binary and OpenGL support"
+	@echo "  make verify-strace    - Verify strace binary"
 	@echo "  make clean-x11        - Remove only X11 build (keep sources)"
 	@echo "  make clean-lwjgl      - Remove only LWJGL build (keep sources)"
+	@echo "  make clean-strace     - Remove only strace build (keep sources)"
 	@echo "  make bundle           - Create deployable tar.gz archive"
 	@echo "  make deploy           - Deploy bundle to device via adb"
 	@echo "  make clean            - Remove all build artifacts and stamps"
@@ -88,9 +93,11 @@ container:
 	fi
 
 deps: | container
-deps: $(STAMPS)/libdrm $(STAMPS)/wayland $(STAMPS)/wayland-protocols $(STAMPS)/libevdev $(STAMPS)/libinput $(STAMPS)/xkeyboard-config $(STAMPS)/libxkbcommon $(STAMPS)/seatd $(STAMPS)/pixman $(STAMPS)/cairo $(STAMPS)/openssl
+deps: $(STAMPS)/libdrm $(STAMPS)/wayland $(STAMPS)/wayland-protocols $(STAMPS)/libevdev $(STAMPS)/libinput $(STAMPS)/xkeyboard-config $(STAMPS)/libxkbcommon $(STAMPS)/seatd $(STAMPS)/pixman $(STAMPS)/cairo $(STAMPS)/openssl $(STAMPS)/mesa
 
 weston: deps x11-xwayland $(STAMPS)/weston
+
+mesa: $(STAMPS)/mesa
 
 bundle: weston
 	@echo "Creating deployable archive..."
@@ -109,6 +116,7 @@ deploy: bundle
 clean:
 	rm -rf $(BUILD_DIR) $(STAMPS) $(BUILD_ROOT)/weston.tar.gz $(ZIP_BINARY) $(LDD_BINARY)
 	$(MAKE) -C build/x11 clean 2>/dev/null || true
+	$(MAKE) -C build/strace clean 2>/dev/null || true
 	@echo "Cleaned all artifacts and stamps."
 
 clean-weston:
@@ -124,9 +132,22 @@ clean-ldd:
 	rm -f $(LDD_BINARY)
 	@echo "Cleaned ldd binary."
 
+# strace build target - delegate to build/strace/Makefile
+strace: container
+	$(MAKE) -C build/strace strace
+
+verify-strace:
+	$(MAKE) -C build/strace verify-strace
+
+clean-strace:
+	$(MAKE) -C build/strace clean-strace
+
 # X11 build targets - delegate to build/x11/Makefile
 x11:
 	$(MAKE) -C build/x11 x11
+
+x11-pure:
+	$(MAKE) -C build/x11 STANDALONE=1 x11-pure
 
 x11-deps:
 	$(MAKE) -C build/x11 x11-deps
@@ -347,7 +368,30 @@ $(STAMPS)/openssl: | $(STAMPS)
 		make install_sw CROSS_COMPILE="
 	@touch $@
 
-$(STAMPS)/weston: $(STAMPS)/cairo | $(STAMPS)
+$(STAMPS)/mesa: $(STAMPS)/libdrm $(STAMPS)/wayland $(STAMPS)/wayland-protocols | $(STAMPS)
+	@$(DOCKER_EXEC) "set -euo pipefail; $(ENV_EXPORT) export PKG_CONFIG_SYSROOT_DIR=; \
+		if [ ! -f $(WORKDIR)/build/weston/src/mesa-24.1.7.tar.xz ]; then \
+			if command -v curl >/dev/null 2>&1; then \
+				curl -fsSL -o $(WORKDIR)/build/weston/src/mesa-24.1.7.tar.xz https://archive.mesa3d.org/mesa-24.1.7.tar.xz; \
+			elif command -v wget >/dev/null 2>&1; then \
+				wget -O $(WORKDIR)/build/weston/src/mesa-24.1.7.tar.xz https://archive.mesa3d.org/mesa-24.1.7.tar.xz; \
+			else \
+				echo \"curl/wget not found to download Mesa\"; exit 1; \
+			fi; \
+		fi; \
+		cd $(WORKDIR)/build/weston/build; \
+		rm -rf mesa-24.1.7 && tar xf $(WORKDIR)/build/weston/src/mesa-24.1.7.tar.xz; \
+		cd mesa-24.1.7; \
+		meson setup _build --prefix=\$$PREFIX --libdir=lib --buildtype=release --cross-file=$(CROSSFILE) --native-file=$(NATIVEFILE) \
+			-Dplatforms=wayland -Degl-native-platform=wayland \
+			-Dgallium-drivers=kmsro,swrast -Dvulkan-drivers= \
+			-Dgles1=disabled -Dgles2=enabled -Dopengl=true \
+			-Dgbm=enabled -Dglx=disabled -Dllvm=disabled -Dshared-llvm=disabled \
+			-Dshared-glapi=enabled -Dzstd=disabled -Dvalgrind=disabled; \
+		ninja -C _build install"
+	@touch $@
+
+$(STAMPS)/weston: $(STAMPS)/cairo $(STAMPS)/mesa | $(STAMPS)
 	@$(DOCKER_EXEC) "set -euo pipefail; $(ENV_EXPORT) export PKG_CONFIG_SYSROOT_DIR=; \
 		cd $(WORKDIR)/build/weston/build; \
 		rm -rf weston-10.0.4 && tar xf $(WORKDIR)/build/weston/src/weston-10.0.4.tar.xz; \
@@ -357,7 +401,7 @@ $(STAMPS)/weston: $(STAMPS)/cairo | $(STAMPS)
 		meson setup _build --prefix=\$$PREFIX --libdir=lib --buildtype=release --cross-file=$(CROSSFILE) --native-file=$(NATIVEFILE) \
 			-Dc_link_args=\"-Wl,--no-as-needed -L$(WORKDIR)/build/x11/prefix/lib -Wl,-rpath,$(WORKDIR)/build/x11/prefix/lib -Wl,-rpath-link,$(WORKDIR)/build/x11/prefix/lib -ldl -lpthread -Wl,--as-needed\" \
 			-Dcpp_link_args=\"-Wl,--no-as-needed -L$(WORKDIR)/build/x11/prefix/lib -Wl,-rpath,$(WORKDIR)/build/x11/prefix/lib -Wl,-rpath-link,$(WORKDIR)/build/x11/prefix/lib -ldl -lpthread -Wl,--as-needed\" \
-			-Drenderer-gl=false -Dbackend-drm=true -Dbackend-headless=true -Ddeprecated-backend-fbdev=true -Dbackend-default=drm \
+			-Drenderer-gl=true -Dbackend-drm=true -Dbackend-headless=true -Ddeprecated-backend-fbdev=true -Dbackend-default=drm \
 			-Dbackend-rdp=false -Dbackend-wayland=false -Dbackend-x11=false \
 			-Dbackend-drm-screencast-vaapi=false -Dscreenshare=false -Dpipewire=false -Dremoting=false -Dxwayland=false -Dsystemd=false \
 			-Dlauncher-logind=false -Dlauncher-libseat=false -Ddeprecated-weston-launch=true -Ddeprecated-wl-shell=false \
